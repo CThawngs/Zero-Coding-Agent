@@ -49,10 +49,37 @@ export default function PermissionModal({ conversationId }) {
   ]
 
   return (
-    <div className="setup-modal-overlay" style={{ backdropFilter: 'blur(12px)', background: 'rgba(5, 5, 8, 0.85)' }}>
-      <div className="setup-modal-card" style={{ maxWidth: '640px', padding: '32px', width: '90%', animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backdropFilter: 'blur(16px)',
+      background: 'rgba(5, 5, 8, 0.85)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 20000,
+      animation: 'fadeIn 0.3s ease'
+    }}>
+      <div style={{
+        background: '#13141a',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '24px',
+        width: '640px',
+        maxWidth: '90vw',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        padding: '32px',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
+        animation: 'slideUp 0.3s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px'
+      }}>
         
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{ textAlign: 'center' }}>
           <div style={{ 
             display: 'inline-flex', 
             padding: '12px', 
