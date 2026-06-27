@@ -379,8 +379,8 @@ router.post('/stream', async (req, res) => {
     }
 
     // Parse tool calls from text if any exist in response
-    if (fullResponseText.includes('```tool_call')) {
-      const parsedToolCalls = parseToolCallsFromText(fullResponseText);
+    const parsedToolCalls = parseToolCallsFromText(fullResponseText);
+    if (parsedToolCalls.length > 0) {
       for (const tc of parsedToolCalls) {
         if (clientDisconnected) break;
         sseSend(res, { type: 'tool_call', id: tc.id, tool: tc.tool, params: tc.params });

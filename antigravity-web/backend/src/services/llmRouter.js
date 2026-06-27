@@ -179,10 +179,11 @@ export const PROVIDERS = {
 // ============================================================
 export function parseToolCalls(text) {
   const toolCalls = [];
-  const regex = /```tool_call\s*\n([\s\S]*?)\n```/g;
-  let match;
   
-  while ((match = regex.exec(text)) !== null) {
+  // 1. Parse standard ```tool_call markdown blocks
+  const markdownRegex = /```tool_call\s*\n([\s\S]*?)\n```/g;
+  let match;
+  while ((match = markdownRegex.exec(text)) !== null) {
     try {
       const parsed = JSON.parse(match[1].trim());
       if (parsed.tool && parsed.params !== undefined) {
@@ -194,7 +195,44 @@ export function parseToolCalls(text) {
         });
       }
     } catch (e) {
-      console.warn('[LLMRouter] Failed to parse tool call:', match[1]);
+      console.warn('[LLMRouter] Failed to parse markdown tool call:', match[1]);
+    }
+  }
+
+  // 2. Parse XML/longcat tags format (e.g. <longcat_tool_call>fetch_url<longcat_arg_key>params</longcat_arg_key> <longcat_arg_value>...</longcat_arg_value></longcat_tool_call>)
+  const longcatRegex = /<(?:[a-zA-Z0-9_]+_)?tool_call>([a-zA-Z0-9_]+)<(?:[a-zA-Z0-9_]+_)?arg_key>[a-zA-Z0-9_]+<\/(?:[a-zA-Z0-9_]+_)?arg_key>\s*<(?:[a-zA-Z0-9_]+_)?arg_value>([\s\S]*?)<\/(?:[a-zA-Z0-9_]+_)?arg_value>\s*<\/(?:[a-zA-Z0-9_]+_)?tool_call>/g;
+  while ((match = longcatRegex.exec(text)) !== null) {
+    try {
+      const toolName = match[1].trim();
+      const valStr = match[2].trim();
+      const params = JSON.parse(valStr);
+      toolCalls.push({
+        id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        tool: toolName,
+        params: params,
+        raw: match[0]
+      });
+    } catch (e) {
+      console.warn('[LLMRouter] Failed to parse longcat tool call:', match[0]);
+    }
+  }
+
+  // 3. Parse generic <tool_call>JSON</tool_call> XML format
+  const genericXmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+  while ((match = genericXmlRegex.exec(text)) !== null) {
+    try {
+      if (match[0].includes('arg_value')) continue;
+      const parsed = JSON.parse(match[1].trim());
+      if (parsed.tool && parsed.params !== undefined) {
+        toolCalls.push({
+          id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          tool: parsed.tool,
+          params: parsed.params,
+          raw: match[0]
+        });
+      }
+    } catch (e) {
+      console.warn('[LLMRouter] Failed to parse generic XML tool call:', match[1]);
     }
   }
   

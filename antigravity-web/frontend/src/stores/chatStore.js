@@ -114,20 +114,26 @@ const useChatStore = create((set, get) => ({
   updateConversation: async (id, data) => {
     try {
       const updated = await api.updateConversation(id, data)
-      set(state => ({
-        conversations: state.conversations.map(c => c.id === id ? { ...c, ...updated } : c),
-        activeConversation: state.activeConversationId === id
-          ? { ...state.activeConversation, ...updated }
-          : state.activeConversation
-      }))
+      set(state => {
+        const { messages, ...metaOnly } = updated
+        return {
+          conversations: state.conversations.map(c => c.id === id ? { ...c, ...metaOnly } : c),
+          activeConversation: state.activeConversationId === id
+            ? { ...state.activeConversation, ...metaOnly }
+            : state.activeConversation
+        }
+      })
     } catch (err) {
       // Optimistic update
-      set(state => ({
-        conversations: state.conversations.map(c => c.id === id ? { ...c, ...data } : c),
-        activeConversation: state.activeConversationId === id
-          ? { ...state.activeConversation, ...data }
-          : state.activeConversation
-      }))
+      set(state => {
+        const { messages, ...metaOnly } = data
+        return {
+          conversations: state.conversations.map(c => c.id === id ? { ...c, ...metaOnly } : c),
+          activeConversation: state.activeConversationId === id
+            ? { ...state.activeConversation, ...metaOnly }
+            : state.activeConversation
+        }
+      })
     }
   },
 

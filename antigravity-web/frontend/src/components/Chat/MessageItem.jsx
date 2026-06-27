@@ -145,6 +145,21 @@ export default function MessageItem({ message, isStreaming, streamingContent }) 
         <div className={`message-bubble ${isUser ? 'bubble-user' : 'bubble-assistant'}`}>
           {isUser ? (
             <div className="message-text">{content}</div>
+          ) : (!content && isStreaming) ? (
+            <div className="thinking-indicator" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}>
+              <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both' }}></span>
+              <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-secondary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both', animationDelay: '0.2s' }}></span>
+              <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both', animationDelay: '0.4s' }}></span>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 500 }}>
+                Zero Coding Agent is thinking...
+              </span>
+              <style dangerouslySetInnerHTML={{__html: `
+                @keyframes thinkingPulse {
+                  0%, 80%, 100% { transform: scale(0.3); opacity: 0.3; }
+                  40% { transform: scale(1); opacity: 1; }
+                }
+              `}} />
+            </div>
           ) : (
             <div className="message-markdown">
               <ReactMarkdown
