@@ -9,14 +9,14 @@ import './SettingsModal.css'
 const TABS = ['Providers', 'MCP', 'GitHub', 'Appearance', 'About']
 
 const PROVIDER_ICONS = {
-  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini.svg',
-  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg',
-  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg',
-  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
-  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama.svg',
-  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
-  custom: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lobe.svg',
-  '9router': 'https://9router.com/favicon.ico',
+  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
+  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
+  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
+  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
+  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+  custom: null,
+  '9router': '/nine-router.png',
 }
 
 function ApiKeyInput({ providerId, label }) {
@@ -120,7 +120,9 @@ function ProviderSection({ pid }) {
       connected: true
     })
     setSaveStatus(true)
-    setTimeout(() => setSaveStatus(false), 2000)
+    setTimeout(() => {
+      window.location.reload()
+    }, 500)
   }
 
   const handleAddModel = () => {
@@ -134,12 +136,16 @@ function ProviderSection({ pid }) {
     <div className="provider-section">
       <div className="provider-header">
         <div className="provider-icon">
-          {PROVIDER_ICONS[pid]?.startsWith('http') ? (
+          {PROVIDER_ICONS[pid] ? (
             <img src={PROVIDER_ICONS[pid]} alt="" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
-          ) : PROVIDER_ICONS[pid]}
+          ) : (
+            <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              {pdef.name[0]}
+            </div>
+          )}
         </div>
         <div className="provider-meta">
-          <div className="provider-name">{isCustom ? customName : pdef.name}</div>
+          <div className="provider-name">{(isCustom && pid !== '9router') ? customName : pdef.name}</div>
           <div className={`provider-status ${provider?.connected ? 'connected' : ''}`}>
             {provider?.connected ? '● Connected' : '○ Not connected'}
           </div>
@@ -155,16 +161,18 @@ function ProviderSection({ pid }) {
       {isCustom && (
         <div className="custom-provider-config" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <div style={{ flex: 1 }}>
-              <label className="input-label" style={{ fontSize: '10px' }}>Name custom endpoint</label>
-              <input
-                type="text"
-                className="settings-input"
-                value={customName}
-                onChange={e => setCustomName(e.target.value)}
-                placeholder="Name custom endpoint"
-              />
-            </div>
+            {pid !== '9router' && (
+              <div style={{ flex: 1 }}>
+                <label className="input-label" style={{ fontSize: '10px' }}>Name custom endpoint</label>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  placeholder="Name custom endpoint"
+                />
+              </div>
+            )}
             <div style={{ flex: 2 }}>
               <label className="input-label" style={{ fontSize: '10px' }}>Base URL</label>
               <input
@@ -401,7 +409,7 @@ function McpSection() {
               onChange={e => setArgsStr(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={isLoading}>
+          <button type="submit" className="btn btn-primary" disabled={isLoading} style={{ width: '100%', padding: '12px', marginTop: '8px', fontWeight: 600 }}>
             {isLoading ? 'Đang thêm...' : 'Thêm Server'}
           </button>
         </form>

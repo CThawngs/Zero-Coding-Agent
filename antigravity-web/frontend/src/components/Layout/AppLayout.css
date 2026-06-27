@@ -15,12 +15,12 @@
   transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 
 .sidebar-panel.collapsed {
   width: 0 !important;
-  border-right: none;
+  border-left: none;
 }
 
 /* --- Chat Panel --- */
@@ -41,12 +41,12 @@
   flex-shrink: 0;
   transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
   background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
 
 .explorer-panel.collapsed {
   width: 0 !important;
-  border-left: none;
+  border-right: none;
 }
 
 /* --- Resize Handle Overrides in Layout --- */

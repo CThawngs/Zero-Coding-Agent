@@ -6,14 +6,14 @@ import './SetupModal.css'
 const PROVIDER_IDS = ['google', 'openai', 'anthropic', 'openrouter', 'ollama', 'lmstudio', '9router', 'custom']
 
 const PROVIDER_ICONS = {
-  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini.svg',
-  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg',
-  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg',
-  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
-  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama.svg',
-  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
-  '9router': 'https://9router.com/favicon.ico',
-  custom: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lobe.svg',
+  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
+  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
+  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
+  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
+  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+  '9router': '/nine-router.png',
+  custom: null,
 }
 
 const PROVIDER_DESCRIPTIONS = {
@@ -126,9 +126,13 @@ export default function SetupModal({ onComplete }) {
                       onClick={() => setSelectedProvider(pid)}
                     >
                       <div className="option-icon">
-                        {PROVIDER_ICONS[pid]?.startsWith('http') ? (
+                        {PROVIDER_ICONS[pid] ? (
                           <img src={PROVIDER_ICONS[pid]} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-                        ) : PROVIDER_ICONS[pid]}
+                        ) : (
+                          <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                            {PROVIDER_MODELS[pid].name[0]}
+                          </div>
+                        )}
                       </div>
                       <div className="option-meta">
                         <div className="option-name">{PROVIDER_MODELS[pid].name}</div>
@@ -152,9 +156,13 @@ export default function SetupModal({ onComplete }) {
               <div className="setup-step">
                 <div className="step-provider-header">
                   <span className="step-provider-icon">
-                    {PROVIDER_ICONS[selectedProvider]?.startsWith('http') ? (
+                    {PROVIDER_ICONS[selectedProvider] ? (
                       <img src={PROVIDER_ICONS[selectedProvider]} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
-                    ) : PROVIDER_ICONS[selectedProvider]}
+                    ) : (
+                      <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                        {PROVIDER_MODELS[selectedProvider].name[0]}
+                      </div>
+                    )}
                    </span>
                   <h2>Cấu hình {PROVIDER_MODELS[selectedProvider].name}</h2>
                 </div>

@@ -418,8 +418,8 @@ export async function* streamLLM(options, signal) {
   } else {
     messagesWithSystem.unshift({ role: 'system', content: dynamicSystemPrompt });
   }
-  
-  const apiKey = customApiKey || process.env[providerDef.envKey] || '';
+  const isMasked = typeof customApiKey === 'string' && customApiKey.includes('*');
+  const apiKey = (customApiKey && !isMasked) ? customApiKey : (process.env[providerDef.envKey] || '');
   
   try {
     switch (provider) {
@@ -444,8 +444,8 @@ export async function* streamLLM(options, signal) {
           resolvedContext,
           signal,
           {
-            'HTTP-Referer': 'http://localhost:5743',
-            'X-Title': 'Antigravity Web'
+            'HTTP-Referer': 'https://github.com/CThawngs/Zero-Coding-Agent',
+            'X-Title': 'Zero Coding Agent'
           }
         );
         break;
@@ -508,7 +508,9 @@ export { streamLLM as streamChat };
 // ============================================================
 // FETCH AVAILABLE MODELS
 // ============================================================
-export async function fetchProviderModels(provider, apiKey, baseURL) {
+export async function fetchProviderModels(provider, apiKeyInput, baseURL) {
+  const isMasked = typeof apiKeyInput === 'string' && apiKeyInput.includes('*');
+  const apiKey = (apiKeyInput && !isMasked) ? apiKeyInput : (process.env[PROVIDERS[provider]?.envKey] || '');
 
   try {
     switch (provider) {
@@ -596,7 +598,10 @@ export async function fetchProviderModels(provider, apiKey, baseURL) {
 // ============================================================
 // TEST CONNECTION
 // ============================================================
-export async function testConnection(provider, apiKey, baseURL) {
+export async function testConnection(provider, apiKeyInput, baseURL) {
+  const isMasked = typeof apiKeyInput === 'string' && apiKeyInput.includes('*');
+  const apiKey = (apiKeyInput && !isMasked) ? apiKeyInput : (process.env[PROVIDERS[provider]?.envKey] || '');
+
   try {
     switch (provider) {
       case 'google': {

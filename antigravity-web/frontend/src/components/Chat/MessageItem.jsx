@@ -4,7 +4,20 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { Copy, Check, ChevronDown, ChevronRight, FileText, Terminal, Globe, Folder } from 'lucide-react'
 import { format } from 'date-fns'
+import useProviderStore from '../../stores/providerStore'
+import useChatStore from '../../stores/chatStore'
 import './MessageItem.css'
+
+const PROVIDER_ICONS = {
+  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
+  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
+  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
+  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
+  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+  custom: null,
+  '9router': '/nine-router.png',
+}
 
 function CopyButton({ text, small }) {
   const [copied, setCopied] = useState(false)
@@ -120,10 +133,33 @@ export default function MessageItem({ message, isStreaming, streamingContent }) 
   const content = isStreaming ? streamingContent : message.content
   const toolCalls = message.toolCalls || []
 
+  const activeProvider = useProviderStore(state => state.activeProvider)
+  const activeConversation = useChatStore(state => state.activeConversation)
+  const providerId = message.provider || activeConversation?.provider || activeProvider
+  const providerIcon = PROVIDER_ICONS[providerId]
+
   return (
     <div className={`message-item ${isUser ? 'message-user' : 'message-assistant'}`}>
-      <div className="message-avatar">
+      <div className="message-avatar" style={{ position: 'relative' }}>
         {isUser ? '👤' : '⚡'}
+        {!isUser && providerIcon && (
+          <img 
+            src={providerIcon} 
+            alt="" 
+            style={{ 
+              position: 'absolute', 
+              bottom: '-3px', 
+              right: '-3px', 
+              width: '12px', 
+              height: '12px', 
+              borderRadius: '50%', 
+              background: 'var(--bg-secondary)', 
+              border: '1px solid var(--border)',
+              padding: '1px',
+              objectFit: 'contain'
+            }} 
+          />
+        )}
       </div>
       <div className="message-content-wrap">
         {/* Attachments */}
@@ -150,7 +186,8 @@ export default function MessageItem({ message, isStreaming, streamingContent }) 
               <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both' }}></span>
               <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-secondary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both', animationDelay: '0.2s' }}></span>
               <span className="thinking-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'inline-block', animation: 'thinkingPulse 1.4s infinite ease-in-out both', animationDelay: '0.4s' }}></span>
-              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 500 }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {providerIcon && <img src={providerIcon} alt="" style={{ width: '12px', height: '12px', objectFit: 'contain' }} />}
                 Zero Coding Agent is thinking...
               </span>
               <style dangerouslySetInnerHTML={{__html: `

@@ -5,7 +5,7 @@ import { api } from '../utils/api'
 export const PROVIDER_MODELS = {
   google: {
     name: 'Google',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
     color: '#4285f4',
     models: [
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000, free: false },
@@ -17,7 +17,7 @@ export const PROVIDER_MODELS = {
   },
   openai: {
     name: 'OpenAI',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
     color: '#10a37f',
     models: [
       { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000, free: false },
@@ -30,7 +30,7 @@ export const PROVIDER_MODELS = {
   },
   anthropic: {
     name: 'Anthropic',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
     color: '#cc785c',
     models: [
       { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', contextWindow: 200000, free: false },
@@ -42,31 +42,31 @@ export const PROVIDER_MODELS = {
   },
   openrouter: {
     name: 'OpenRouter',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
     color: '#7c3aed',
     models: [] // Dynamic / user-added
   },
   ollama: {
     name: 'Ollama',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
     color: '#f97316',
     models: [] // Detected locally
   },
   lmstudio: {
     name: 'LM Studio',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
+    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
     color: '#06b6d4',
     models: [] // Detected locally
   },
   custom: {
     name: 'Custom Endpoint',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lobe.svg',
+    icon: null,
     color: '#3b82f6',
     models: [] // Custom/User added
   },
   '9router': {
     name: '9Router',
-    icon: 'https://9router.com/favicon.ico',
+    icon: '/nine-router.png',
     color: '#3b82f6',
     models: []
   }
@@ -90,6 +90,56 @@ const useProviderStore = create(
       activeModel: null,
       contextWindow: 'auto',
       showFreeOnly: false,
+
+      // Sync config with backend on startup
+      syncWithBackend: async () => {
+        try {
+          const config = await api.getConfig()
+          set(state => {
+            const updatedProviders = { ...state.providers }
+            const envKeys = {
+              google: 'GOOGLE_API_KEY',
+              openai: 'OPENAI_API_KEY',
+              anthropic: 'ANTHROPIC_API_KEY',
+              openrouter: 'OPENROUTER_API_KEY',
+              custom: 'CUSTOM_API_KEY',
+              '9router': 'NINEROUTER_API_KEY'
+            }
+
+            Object.keys(updatedProviders).forEach(pid => {
+              const envKey = envKeys[pid]
+              if (envKey) {
+                const hasKey = config[envKey] && config[envKey].length > 0
+                if (hasKey) {
+                  updatedProviders[pid].connected = true
+                  if (!updatedProviders[pid].apiKey) {
+                    updatedProviders[pid].apiKey = config[envKey]
+                  }
+                }
+              }
+            })
+
+            let activeProvider = state.activeProvider
+            let activeModel = state.activeModel
+            if (!activeProvider) {
+              const firstConnected = Object.keys(updatedProviders).find(pid => updatedProviders[pid].connected)
+              if (firstConnected) {
+                activeProvider = firstConnected
+                const models = PROVIDER_MODELS[firstConnected]?.models || []
+                activeModel = models[0]?.id || null
+              }
+            }
+
+            return {
+              providers: updatedProviders,
+              activeProvider,
+              activeModel
+            }
+          })
+        } catch (err) {
+          console.warn('Failed to sync provider config with backend:', err.message)
+        }
+      },
 
       // Check if any provider is configured
       isConfigured: () => {
@@ -344,7 +394,10 @@ const useProviderStore = create(
 
       // Check if model is free
       isModelFree: (model) => {
-        return model?.free === true
+        if (!model) return false
+        const nameMatch = typeof model.name === 'string' && model.name.toLowerCase().includes('free')
+        const idMatch = typeof model.id === 'string' && model.id.toLowerCase().includes('free')
+        return model.free === true || nameMatch || idMatch
       },
 
       // Set base URL for local providers

@@ -438,6 +438,9 @@ body.theme-dark select.settings-input option,
 
 .info-row span:last-child {
   color: var(--text-secondary);
+  text-align: right;
+  max-width: 70%;
+  word-break: break-word;
 }
 
 .about-features {

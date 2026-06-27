@@ -4,14 +4,14 @@ import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
 import './ModelSelector.css'
 
 const PROVIDER_ICONS = {
-  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini.svg',
-  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg',
-  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg',
-  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
-  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama.svg',
-  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
-  custom: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lobe.svg',
-  '9router': 'https://9router.com/favicon.ico',
+  google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
+  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+  anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
+  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
+  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
+  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+  custom: null,
+  '9router': '/nine-router.png',
 }
 
 export default function ModelSelector() {
@@ -21,7 +21,7 @@ export default function ModelSelector() {
   const {
     activeProvider, activeModel, providers,
     selectProvider, selectModel, getModelsForProvider,
-    showFreeOnly, toggleFreeFilter
+    showFreeOnly, toggleFreeFilter, isModelFree
   } = useProviderStore()
 
   useEffect(() => {
@@ -39,9 +39,9 @@ export default function ModelSelector() {
     const icon = PROVIDER_ICONS[activeProvider]
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-        {icon && icon.startsWith('http') ? (
+        {icon ? (
           <img src={icon} alt="" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />
-        ) : icon || '🤖'}
+        ) : null}
         {activeModel}
       </span>
     )
@@ -51,7 +51,7 @@ export default function ModelSelector() {
     const models = getModelsForProvider(pid)
     const filtered = models.filter(m => {
       const matchSearch = !search || m.id.toLowerCase().includes(search.toLowerCase()) || m.name.toLowerCase().includes(search.toLowerCase())
-      const matchFree = !showFreeOnly || m.free
+      const matchFree = !showFreeOnly || isModelFree(m)
       return matchSearch && matchFree
     })
     return { pid, pdef, models: filtered }
@@ -97,9 +97,9 @@ export default function ModelSelector() {
                 <div key={pid} className="provider-group">
                   <div className="provider-group-header">
                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      {PROVIDER_ICONS[pid] && PROVIDER_ICONS[pid].startsWith('http') ? (
+                      {PROVIDER_ICONS[pid] ? (
                         <img src={PROVIDER_ICONS[pid]} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
-                      ) : PROVIDER_ICONS[pid] || '🤖'}
+                      ) : null}
                       {pdef.name}
                     </span>
                     {!connected && <span className="not-connected">Not configured</span>}

@@ -34,13 +34,20 @@ export default function App() {
   }, [workspace, activeConversation])
 
   useEffect(() => {
-    // Check if any provider is configured on mount
-    const configured = isConfigured()
-    if (!configured) {
-      setShowSetup(true)
+    const init = async () => {
+      // Sync config from backend first
+      await useProviderStore.getState().syncWithBackend()
+      
+      // Check if any provider is configured
+      const configured = useProviderStore.getState().isConfigured()
+      if (!configured) {
+        setShowSetup(true)
+      }
+      // Load conversations
+      loadConversations()
     }
-    // Load conversations
-    loadConversations()
+    
+    init()
 
     // Automatically load default workspace on localhost if not set
     const isCloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'

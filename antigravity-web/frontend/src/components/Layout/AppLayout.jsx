@@ -48,9 +48,9 @@ export default function AppLayout() {
     const onMove = (ev) => {
       const dx = ev.clientX - startXRef.current
       if (panel === 'sidebar') {
-        setSidebarWidth(Math.max(200, Math.min(480, startWidthRef.current + dx)))
+        setSidebarWidth(Math.max(200, Math.min(480, startWidthRef.current - dx)))
       } else {
-        setExplorerWidth(Math.max(240, Math.min(600, startWidthRef.current - dx)))
+        setExplorerWidth(Math.max(240, Math.min(600, startWidthRef.current + dx)))
       }
     }
     const onUp = () => {
@@ -64,14 +64,30 @@ export default function AppLayout() {
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
+      {/* File Explorer (Left Panel now) */}
       <div
-        className={`sidebar-panel ${sidebarOpen ? 'open' : 'collapsed'} ${dragging === 'sidebar' ? 'no-transition' : ''}`}
-        style={{ width: sidebarOpen ? sidebarWidth : 0 }}
+        className={`explorer-panel ${explorerOpen ? 'open' : 'collapsed'} ${dragging === 'explorer' ? 'no-transition' : ''}`}
+        style={{ width: explorerOpen ? explorerWidth : 0 }}
       >
-        <Sidebar
-          onSettings={() => setShowSettings(true)}
-          onExplorerToggle={() => setExplorerOpen(v => !v)}
+        {explorerOpen && <FileExplorer />}
+      </div>
+
+      {/* Explorer Resize Handle */}
+      {explorerOpen && (
+        <div
+          className="resize-handle"
+          onMouseDown={startResize('explorer')}
+          title="Drag to resize"
+        />
+      )}
+
+      {/* Main Chat Area (Center Panel) */}
+      <div className="chat-panel">
+        <ChatWindow
+          onToggleSidebar={() => setSidebarOpen(v => !v)}
+          onToggleExplorer={() => setExplorerOpen(v => !v)}
+          sidebarOpen={sidebarOpen}
+          explorerOpen={explorerOpen}
         />
       </div>
 
@@ -84,31 +100,15 @@ export default function AppLayout() {
         />
       )}
 
-      {/* Main Chat Area */}
-      <div className="chat-panel">
-        <ChatWindow
-          onToggleSidebar={() => setSidebarOpen(v => !v)}
-          onToggleExplorer={() => setExplorerOpen(v => !v)}
-          sidebarOpen={sidebarOpen}
-          explorerOpen={explorerOpen}
-        />
-      </div>
-
-      {/* Explorer Resize Handle */}
-      {explorerOpen && (
-        <div
-          className="resize-handle"
-          onMouseDown={startResize('explorer')}
-          title="Drag to resize"
-        />
-      )}
-
-      {/* File Explorer */}
+      {/* Sidebar (Conversations history / Right Panel now) */}
       <div
-        className={`explorer-panel ${explorerOpen ? 'open' : 'collapsed'} ${dragging === 'explorer' ? 'no-transition' : ''}`}
-        style={{ width: explorerOpen ? explorerWidth : 0 }}
+        className={`sidebar-panel ${sidebarOpen ? 'open' : 'collapsed'} ${dragging === 'sidebar' ? 'no-transition' : ''}`}
+        style={{ width: sidebarOpen ? sidebarWidth : 0 }}
       >
-        {explorerOpen && <FileExplorer />}
+        <Sidebar
+          onSettings={() => setShowSettings(true)}
+          onExplorerToggle={() => setExplorerOpen(v => !v)}
+        />
       </div>
 
       {/* Settings Modal */}
