@@ -47,6 +47,11 @@ const useChatStore = create((set, get) => ({
   streamingMessageId: null,
   pendingApprovals: [],
   error: null,
+  // Agent loop state
+  isAgentWorking: false,        // True when agent is in multi-turn coding loop
+  agentStatus: '',              // Current status text (e.g. "Executing tool...")
+  agentIterationCount: 0,       // How many loop iterations done
+  _abortController: null,       // AbortController for the active stream
 
   // Load all conversations
   loadConversations: async () => {
@@ -215,7 +220,7 @@ const useChatStore = create((set, get) => ({
     }
   },
 
-  // Stream message via SSE
+  // Stream message via SSE - Antigravity-style continuous agent loop
   streamMessage: async (content, attachments = [], provider, model) => {
     const { activeConversationId, activeConversation } = get()
     if (!content.trim() && attachments.length === 0) return
@@ -254,6 +259,9 @@ const useChatStore = create((set, get) => ({
         messages: [...(state.activeConversation?.messages || []), userMsg]
       },
       isStreaming: true,
+      isAgentWorking: true,
+      agentStatus: 'Thinking...',
+      agentIterationCount: 0,
       streamingContent: '',
       streamingMessageId: assistantMsgId,
     }))
@@ -263,7 +271,11 @@ const useChatStore = create((set, get) => ({
       const customApiKey = providerState?.apiKey
       const customBaseURL = providerState?.baseUrl
 
-      await streamChat(
+      // Create an AbortController for this stream
+      const abortController = new AbortController();
+      set({ _abortController: abortController });
+
+      const cancelStream = streamChat(
         {
           conversationId: convId,
           content,
@@ -278,16 +290,28 @@ const useChatStore = create((set, get) => ({
         },
         // onChunk
         (chunk) => {
-          set(state => ({ streamingContent: state.streamingContent + chunk }))
+          set(state => ({ 
+            streamingContent: state.streamingContent + chunk,
+            agentStatus: 'Coding...'
+          }))
         },
         // onToolCall
         (toolCall) => {
           if (toolCall.requiresApproval) {
             get().addPendingApproval(toolCall)
+            set({ 
+              agentStatus: '⏸ Awaiting approval...',
+              agentIterationCount: get().agentIterationCount + 1
+            })
+          } else {
+            set({ 
+              agentStatus: `▶ Executing: ${(toolCall.tool || '').replace(/_/g, ' ')}...`,
+              agentIterationCount: get().agentIterationCount + 1
+            })
           }
         },
         // onDone
-        (finalContent, toolCalls) => {
+        (finalContent, toolCalls, extra) => {
           const assistantMsg = {
             id: assistantMsgId,
             role: 'assistant',
@@ -295,20 +319,27 @@ const useChatStore = create((set, get) => ({
             toolCalls: toolCalls || [],
             timestamp: new Date().toISOString(),
           }
-          set(state => ({
-            activeConversation: {
-              ...state.activeConversation,
-              messages: [...(state.activeConversation?.messages || []), assistantMsg]
-            },
-            isStreaming: false,
-            streamingContent: '',
-            streamingMessageId: null,
-            conversations: state.conversations.map(c =>
-              c.id === convId
-                ? { ...c, updatedAt: new Date().toISOString(), title: c.title === 'New Chat' ? content.slice(0, 50) : c.title }
-                : c
-            )
-          }))
+          set(state => {
+            // If paused (awaiting approval), keep isAgentWorking = true
+            const isPaused = extra?.paused === true;
+            return {
+              activeConversation: {
+                ...state.activeConversation,
+                messages: [...(state.activeConversation?.messages || []), assistantMsg]
+              },
+              isStreaming: false,
+              isAgentWorking: !isPaused,
+              agentStatus: isPaused ? '⏸ Awaiting approval...' : '',
+              streamingContent: '',
+              streamingMessageId: null,
+              _abortController: null,
+              conversations: state.conversations.map(c =>
+                c.id === convId
+                  ? { ...c, updatedAt: new Date().toISOString(), title: c.title === 'New Chat' ? content.slice(0, 50) : c.title }
+                  : c
+              )
+            }
+          })
         },
         // onError
         (err) => {
@@ -317,7 +348,7 @@ const useChatStore = create((set, get) => ({
             const errMsg = {
               id: assistantMsgId,
               role: 'assistant',
-              content: get().streamingContent || `❌ Lỗi: ${err.message || 'Stream thất bại'}`,
+              content: get().streamingContent || `❌ Error: ${err.message || 'Stream failed'}`,
               error: true,
               timestamp: new Date().toISOString(),
             }
@@ -327,15 +358,70 @@ const useChatStore = create((set, get) => ({
                 messages: [...(state.activeConversation?.messages || []), errMsg]
               },
               isStreaming: false,
+              isAgentWorking: false,
+              agentStatus: '',
               streamingContent: '',
               streamingMessageId: null,
+              _abortController: null,
             }
           })
-        }
+        },
+        abortController.signal
       )
+
+      // Store cancel function
+      set({ _cancelStream: cancelStream });
+
     } catch (err) {
       console.error('Stream failed:', err)
-      set({ isStreaming: false, streamingContent: '', streamingMessageId: null })
+      set({ isStreaming: false, isAgentWorking: false, streamingContent: '', streamingMessageId: null, _abortController: null })
+    }
+  },
+
+  // Stop the agent immediately
+  stopAgent: async () => {
+    const { activeConversationId, _abortController } = get()
+    
+    // Abort the fetch signal
+    if (_abortController) {
+      _abortController.abort()
+    }
+
+    // Also tell backend to clean up
+    if (activeConversationId) {
+      try {
+        await api.stopStream(activeConversationId)
+      } catch (err) {
+        console.error('Stop stream API call failed:', err)
+      }
+    }
+
+    set({
+      isStreaming: false,
+      isAgentWorking: false,
+      agentStatus: '⏹ Stopped',
+      streamingContent: '',
+      streamingMessageId: null,
+      _abortController: null,
+    })
+
+    // If there's streaming content, save it as the assistant message
+    const streamingContent = get().streamingContent
+    if (streamingContent && get().activeConversation) {
+      const stopMsg = {
+        id: `msg-stop-${Date.now()}`,
+        role: 'assistant',
+        content: streamingContent + '\n\n*(Agent stopped by user)*',
+        timestamp: new Date().toISOString(),
+      }
+      set(state => ({
+        activeConversation: {
+          ...state.activeConversation,
+          messages: [...(state.activeConversation?.messages || []), stopMsg]
+        },
+        streamingContent: '',
+        streamingMessageId: null,
+      }))
     }
   },
 
@@ -359,6 +445,7 @@ const useChatStore = create((set, get) => ({
             : `Operation failed. Error: ${res.result.error || 'Unknown error'}`;
         }
         
+        // After approval, resume the agent loop by sending the result
         get().streamMessage(resultText, [], activeProvider, activeModel)
       }
     } catch (err) {

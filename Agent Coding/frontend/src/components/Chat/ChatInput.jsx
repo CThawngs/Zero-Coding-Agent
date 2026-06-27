@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { Send, FolderOpen, FileText, Image, Link, Github, X, Paperclip, Loader2 } from 'lucide-react'
+import { Send, FolderOpen, FileText, Image, Link, Github, X, Paperclip, Loader2, Square } from 'lucide-react'
 import useChatStore from '../../stores/chatStore'
 import useProviderStore from '../../stores/providerStore'
 import useFileStore from '../../stores/fileStore'
@@ -21,7 +21,7 @@ export default function ChatInput() {
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  const { isStreaming, streamMessage } = useChatStore()
+  const { isStreaming, isAgentWorking, streamMessage, stopAgent } = useChatStore()
   const { activeProvider, activeModel } = useProviderStore()
   const { workspace, setWorkspace } = useFileStore()
 
@@ -34,18 +34,27 @@ export default function ChatInput() {
   }, [text])
 
   const handleSend = useCallback(async () => {
-    if ((!text.trim() && attachments.length === 0) || isStreaming) return
+    if ((!text.trim() && attachments.length === 0) || isStreaming || isAgentWorking) return
+    if (!activeProvider || !activeModel) return
     const content = text.trim()
     const atts = [...attachments]
     setText('')
     setAttachments([])
     await streamMessage(content, atts, activeProvider, activeModel)
-  }, [text, attachments, isStreaming, streamMessage, activeProvider, activeModel])
+  }, [text, attachments, isStreaming, isAgentWorking, streamMessage, activeProvider, activeModel])
+
+  const handleStop = useCallback(async () => {
+    await stopAgent()
+  }, [stopAgent])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      if (isAgentWorking || isStreaming) {
+        handleStop()
+      } else {
+        handleSend()
+      }
     }
   }
 
@@ -144,6 +153,8 @@ export default function ChatInput() {
     }
   }
 
+  const isBusy = isStreaming || isAgentWorking
+
   return (
     <div className="chat-input-area">
       {/* Attachment chips */}
@@ -232,7 +243,7 @@ export default function ChatInput() {
           />
         </div>
 
-        {/* Textarea + Send */}
+        {/* Textarea + Send/Stop */}
         <div className="chat-input-row">
           <textarea
             ref={textareaRef}
@@ -240,20 +251,40 @@ export default function ChatInput() {
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? t('inputPlaceholderStreaming') : t('inputPlaceholder')}
-            disabled={isStreaming}
+            placeholder={isBusy ? t('inputPlaceholderStreaming') : t('inputPlaceholder')}
+            disabled={isBusy}
             rows={1}
           />
-          <button
-            className={`send-btn ${(text.trim() || attachments.length > 0) && !isStreaming ? 'send-btn-active' : ''}`}
-            onClick={handleSend}
-            disabled={(!text.trim() && attachments.length === 0) || isStreaming}
-            title={language === 'vi' ? 'Gửi (Enter)' : 'Send (Enter)'}
-          >
-            {isStreaming ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
-          </button>
+          {isBusy ? (
+            <button
+              className="send-btn send-btn-stop"
+              onClick={handleStop}
+              title={language === 'vi' ? 'Dừng AI Agent (Enter)' : 'Stop AI Agent (Enter)'}
+            >
+              <Square size={16} />
+            </button>
+          ) : (
+            <button
+              className={`send-btn ${(text.trim() || attachments.length > 0) ? 'send-btn-active' : ''}`}
+              onClick={handleSend}
+              disabled={!text.trim() && attachments.length === 0}
+              title={language === 'vi' ? 'Gửi (Enter)' : 'Send (Enter)'}
+            >
+              <Send size={18} />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Agent status indicator */}
+      {isBusy && (
+        <div className="agent-status-bar">
+          <div className="agent-status-dot"></div>
+          <span className="agent-status-text">
+            {isAgentWorking ? 'AI Agent is working...' : 'Thinking...'}
+          </span>
+        </div>
+      )}
 
       <div className="chat-input-hint">
         {activeProvider && activeModel

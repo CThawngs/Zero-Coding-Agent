@@ -227,7 +227,8 @@ export default function MessageItem({ message, isStreaming, streamingContent }) 
               {format(new Date(message.timestamp), 'HH:mm')}
             </span>
           )}
-          {!isUser && content && <CopyButton text={content} small />}
+          {/* Copy button for ALL messages (user + assistant) */}
+          {content && <CopyButton text={content} small />}
           {message.error && <span className="badge badge-error">Error</span>}
         </div>
       </div>

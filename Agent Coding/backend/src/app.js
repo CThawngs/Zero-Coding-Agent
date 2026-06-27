@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { mkdirSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 
 // Routes
 import chatRoutes from './routes/chat.js';
@@ -103,8 +103,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
 });
 
-// Serve static frontend files
-const distPath = join(__dirname, '../public');
+// Serve static frontend files - check multiple possible locations
+const possibleDistPaths = [
+  join(__dirname, '../public'),
+  join(__dirname, '../../frontend/dist'),
+  join(__dirname, '../frontend/dist'),
+]
+let distPath = possibleDistPaths.find(p => existsSync(join(p, 'index.html')))
+if (!distPath) distPath = possibleDistPaths[0];
 app.use(express.static(distPath));
 
 // Fallback all other GET requests to index.html (for React Router)

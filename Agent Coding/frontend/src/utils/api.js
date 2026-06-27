@@ -82,7 +82,6 @@ export const api = {
   },
 
   // --- Conversations ---
-  // Backend routes: GET/POST /api/conversations, GET/PUT/DELETE /api/conversations/:id
   getConversations: () => request('/conversations'),
   getConversation: (id) => request(`/conversations/${id}`),
   createConversation: (data) => request('/conversations', { method: 'POST', body: data }),
@@ -141,6 +140,10 @@ export const api = {
   rejectCommand: (commandId) =>
     request('/terminal/reject', { method: 'POST', body: { commandId } }),
 
+  // --- Stream Control ---
+  stopStream: (conversationId) =>
+    request('/stream/stop', { method: 'POST', body: { conversationId } }),
+
   // --- Config ---
   getConfig: () => request('/config'),
 
@@ -161,17 +164,16 @@ export const api = {
 // ============================================================
 // SSE Stream Handler - matches backend POST /api/stream
 // ============================================================
-export async function streamChat(
+export function streamChat(
   { conversationId, content, attachments, provider, model, contextWindow, messages, customApiKey, customBaseURL, permissionMode },
   onChunk,
   onToolCall,
   onDone,
-  onError
+  onError,
+  signal // Optional AbortSignal
 ) {
-  // Backend stream endpoint is POST /api/stream
   const url = `${BASE_URL}/stream`
   
-  // Build messages array if not provided
   const msgArray = messages || [{ role: 'user', content }]
   
   const body = JSON.stringify({
@@ -187,13 +189,20 @@ export async function streamChat(
     permissionMode: permissionMode || 'balanced',
   })
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
+  // Use provided signal or create a local one
+  const abortController = new AbortController();
+  const fetchSignal = signal || abortController.signal;
 
+  let fullContent = ''
+  let toolCalls = []
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    signal: fetchSignal,
+  })
+  .then(async (response) => {
     if (!response.ok) {
       const errText = await response.text()
       throw new ApiError(`HTTP ${response.status}: ${errText}`, response.status)
@@ -202,10 +211,27 @@ export async function streamChat(
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let fullContent = ''
-    let toolCalls = []
 
+    return readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, fetchSignal)
+  })
+  .catch(err => {
+    if (err.name === 'AbortError') {
+      // Stream was intentionally aborted (user clicked stop)
+      onDone(fullContent, toolCalls)
+    } else {
+      console.error('Stream error:', err)
+      onError(err)
+    }
+  })
+
+  // Return the abort function so consumer can cancel
+  return () => abortController.abort()
+}
+
+async function readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, signal) {
+  try {
     while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const { done, value } = await reader.read()
       if (done) break
 
@@ -235,11 +261,10 @@ export async function streamChat(
 
             case 'tool_call':
               toolCalls.push(parsed)
-              onToolCall({ ...parsed, requiresApproval: false }) // Let backend dictate requireApproval
+              onToolCall({ ...parsed, requiresApproval: false })
               break
 
             case 'tool_result':
-              // Tool result - no action needed on frontend side
               break
 
             case 'approval_required':
@@ -252,6 +277,11 @@ export async function streamChat(
                 requiresApproval: true,
               })
               break
+
+            case 'agent_paused':
+              // Agent is paused waiting for approval
+              onDone(fullContent, toolCalls)
+              return
 
             case 'done':
               onDone(parsed.content || fullContent, parsed.toolCalls || toolCalls)
@@ -274,12 +304,15 @@ export async function streamChat(
         }
       }
     }
-
     // Stream ended without done event
     onDone(fullContent, toolCalls)
   } catch (err) {
-    console.error('Stream error:', err)
-    onError(err)
+    if (err.name === 'AbortError') {
+      onDone(fullContent, toolCalls)
+    } else {
+      console.error('Stream error:', err)
+      onError(err)
+    }
   }
 }
 

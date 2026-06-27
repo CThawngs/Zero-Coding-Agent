@@ -36,10 +36,14 @@ import {
   addMessage,
 } from '../services/conversationStore.js';
 import { checkAndLearnFromPraise } from '../services/memoryManager.js';
+import { registerStream, unregisterStream, isStreamActive } from '../services/streamManager.js';
 
 const router = Router();
 
-// Helper to determine if a tool call requires explicit user confirmation
+// ─── Agent Loop Config ──────────────────────────────────────────
+const MAX_AGENT_LOOP_ITERATIONS = 25; // Safety limit to prevent infinite loops
+
+// ─── Helper to determine if a tool call requires explicit user confirmation
 function requiresUserApproval(tool, params, permissionMode) {
   if (permissionMode === 'autonomous') return false;
   
@@ -204,7 +208,6 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
           throw new Error('id and command are required');
         }
         
-        // 1. Read existing config.json
         const mcpRouteFile = resolve('./data/mcp/config.json');
         let config = { mcpServers: {} };
         if (existsSync(mcpRouteFile)) {
@@ -213,15 +216,12 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
           if (!config.mcpServers) config.mcpServers = {};
         }
         
-        // 2. Add to config
         const serverConfig = { command, args, transport };
         config.mcpServers[id] = serverConfig;
         
-        // 3. Write back config
         await fs.mkdir(resolve('./data/mcp'), { recursive: true });
         await fs.writeFile(mcpRouteFile, JSON.stringify(config, null, 2), 'utf-8');
         
-        // 4. Start the server in mcpManager
         await mcpManager.startServer(id, serverConfig);
         
         return { 
@@ -246,7 +246,6 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
         
         const taskId = data.result.taskId;
         
-        // Poll status up to 5 seconds for synchronous response
         let status = 'running';
         let taskResult = null;
         for (let i = 0; i < 5; i++) {
@@ -287,6 +286,121 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
   }
 }
 
+// ─── Agent Loop: one full user message cycle ────────────────────
+async function* runAgentCycle({ provider, model, messages, contextWindow, customApiKey, customBaseURL, permissionMode, conversationId, signal }) {
+  // Track iteration for the loop
+  let iterationCount = 0;
+  let currentMessages = messages;
+  let finalResponseText = '';
+  const allToolCallResults = [];
+
+  while (iterationCount < MAX_AGENT_LOOP_ITERATIONS) {
+    if (signal?.aborted) break;
+    iterationCount++;
+
+    // Stream from LLM
+    let responseText = '';
+    const toolCallResults = [];
+
+    for await (const event of streamLLM({ provider, model, messages: currentMessages, contextWindow, customApiKey, customBaseURL }, signal)) {
+      if (signal?.aborted) break;
+
+      switch (event.type) {
+        case 'delta':
+          responseText += event.content || '';
+          finalResponseText += event.content || '';
+          yield { type: 'delta', content: event.content || '' };
+          break;
+
+        case 'tool_call': {
+          const tcId = event.id || uuidv4();
+          yield { type: 'tool_call', id: tcId, tool: event.tool, params: event.params };
+          const result = await executeToolCall(event, null, permissionMode, conversationId);
+          toolCallResults.push({ id: tcId, tool: event.tool, params: event.params, result });
+          if (!result.pending) {
+            yield { type: 'tool_result', id: tcId, result };
+          } else {
+            // Pending tool approval → pause loop, wait for user
+            yield { type: 'approval_required', commandId: result.commandId, tool: event.tool, params: event.params };
+            // Don't continue loop — human needs to approve
+            yield { type: 'agent_paused', message: 'Waiting for user approval...' };
+            finalResponseText += responseText;
+            yield { type: 'done', content: responseText || finalResponseText, toolCalls: [...allToolCallResults, ...toolCallResults], paused: true };
+            return;
+          }
+          break;
+        }
+
+        case 'usage':
+          yield { type: 'usage', usage: event.usage };
+          break;
+
+        case 'error':
+          yield { type: 'error', message: event.message };
+          break;
+
+        case 'done':
+        default:
+          break;
+      }
+    }
+
+    if (signal?.aborted) break;
+
+    // Parse tool calls from text
+    const parsedToolCalls = parseToolCallsFromText(responseText);
+    
+    if (parsedToolCalls.length > 0) {
+      for (const tc of parsedToolCalls) {
+        if (signal?.aborted) break;
+        yield { type: 'tool_call', id: tc.id, tool: tc.tool, params: tc.params };
+        const result = await executeToolCall(tc, null, permissionMode, conversationId);
+        toolCallResults.push({ id: tc.id, tool: tc.tool, params: tc.params, result });
+        if (!result.pending) {
+          yield { type: 'tool_result', id: tc.id, result };
+        } else {
+          yield { type: 'approval_required', commandId: result.commandId, tool: tc.tool, params: tc.params };
+          yield { type: 'agent_paused', message: 'Waiting for user approval...' };
+          finalResponseText += responseText;
+          yield { type: 'done', content: responseText || finalResponseText, toolCalls: [...allToolCallResults, ...toolCallResults], paused: true };
+          return;
+        }
+      }
+
+      // Remove pending results
+      const completedResults = toolCallResults.filter(r => !r.result.pending);
+      
+      if (completedResults.length > 0 && !signal?.aborted) {
+        const toolResultContext = completedResults
+          .map(r => `Tool: ${r.tool}\nParams: ${JSON.stringify(r.params)}\nResult: ${JSON.stringify(r.result)}`)
+          .join('\n\n');
+
+        // Build follow-up messages
+        currentMessages = [
+          ...currentMessages,
+          { role: 'assistant', content: responseText },
+          { role: 'tool', content: toolResultContext }
+        ];
+        
+        allToolCallResults.push(...toolCallResults);
+        yield { type: 'status', message: `Executed ${completedResults.length} tool(s), continuing analysis...` };
+        continue; // Continue the agent loop
+      }
+    }
+
+    // No more tool calls — done
+    allToolCallResults.push(...toolCallResults);
+    finalResponseText += responseText;
+    yield { type: 'done', content: responseText || finalResponseText, toolCalls: allToolCallResults, iterations: iterationCount };
+    return;
+  }
+
+  // Max iterations hit
+  if (!signal?.aborted) {
+    yield { type: 'done', content: finalResponseText, toolCalls: allToolCallResults, iterations: iterationCount, maxReached: true };
+  }
+}
+
 // ─── POST /api/stream — Main SSE Streaming Endpoint ──────────────────────────
 router.post('/stream', async (req, res) => {
   sseSetup(res);
@@ -308,7 +422,18 @@ router.post('/stream', async (req, res) => {
   }
 
   let clientDisconnected = false;
-  req.on('close', () => { clientDisconnected = true; });
+  const abortController = new AbortController();
+  const signal = abortController.signal;
+  
+  req.on('close', () => { 
+    clientDisconnected = true;
+    abortController.abort();
+  });
+
+  // Register this stream for stop endpoint
+  if (conversationId) {
+    registerStream(conversationId, abortController);
+  }
 
   try {
     // Process attachments
@@ -338,123 +463,134 @@ router.post('/stream', async (req, res) => {
       ...enrichedMessages,
     ];
 
-    // Stream from LLM using async generator
-    let fullResponseText = '';
-    const toolCallResults = [];
-    const providerKey = req.body.customApiKey;
+    const providerApiKey = req.body.customApiKey;
     const providerBaseURL = req.body.customBaseURL;
 
-    for await (const event of streamLLM({ provider, model, messages: fullMessages, contextWindow, customApiKey: providerKey, customBaseURL: providerBaseURL })) {
-      if (clientDisconnected) break;
-
-      switch (event.type) {
-        case 'delta':
-          fullResponseText += event.content || '';
-          sseSend(res, { type: 'delta', content: event.content || '' });
-          break;
-
-        case 'tool_call': {
-          const tcId = event.id || uuidv4();
-          sseSend(res, { type: 'tool_call', id: tcId, tool: event.tool, params: event.params });
-          const result = await executeToolCall(event, res, permissionMode, conversationId);
-          toolCallResults.push({ id: tcId, tool: event.tool, params: event.params, result });
-          if (!result.pending) {
-            sseSend(res, { type: 'tool_result', id: tcId, result });
-          }
-          break;
-        }
-
-        case 'usage':
-          sseSend(res, { type: 'usage', usage: event.usage });
-          break;
-
-        case 'error':
-          sseSend(res, { type: 'error', message: event.message });
-          break;
-
-        case 'done':
-        default:
-          break;
-      }
-    }
-
-    // Parse tool calls from text if any exist in response
-    const parsedToolCalls = parseToolCallsFromText(fullResponseText);
-    if (parsedToolCalls.length > 0) {
-      for (const tc of parsedToolCalls) {
-        if (clientDisconnected) break;
-        sseSend(res, { type: 'tool_call', id: tc.id, tool: tc.tool, params: tc.params });
-        const result = await executeToolCall(tc, res, permissionMode, conversationId);
-        toolCallResults.push({ id: tc.id, tool: tc.tool, params: tc.params, result });
-        if (!result.pending) {
-          sseSend(res, { type: 'tool_result', id: tc.id, result });
-          // Follow-up if needed
-        }
-      }
-
-      // Second pass with tool results
-      if (toolCallResults.filter(r => !r.result.pending).length > 0 && !clientDisconnected) {
-        const toolResultContext = toolCallResults
-          .filter(r => !r.result.pending)
-          .map(r => `Tool: ${r.tool}\nParams: ${JSON.stringify(r.params)}\nResult: ${JSON.stringify(r.result)}`)
-          .join('\n\n');
-
-        if (toolResultContext) {
-          const followUpMessages = [
-            ...fullMessages,
-            { role: 'assistant', content: fullResponseText },
-            { role: 'user', content: `Tool execution results:\n\n${toolResultContext}\n\nPlease continue based on these results.` },
-          ];
-
-          sseSend(res, { type: 'status', message: 'Processing tool results...' });
-
-          for await (const event of streamLLM({ provider, model, messages: followUpMessages, contextWindow })) {
-            if (clientDisconnected) break;
-            if (event.type === 'delta') {
-              fullResponseText += event.content || '';
-              sseSend(res, { type: 'delta', content: event.content || '' });
-            }
-          }
-        }
+    // Run the continuous agent loop
+    for await (const event of runAgentCycle({
+      provider,
+      model,
+      messages: fullMessages,
+      contextWindow,
+      customApiKey: providerApiKey,
+      customBaseURL: providerBaseURL,
+      permissionMode,
+      conversationId,
+      signal
+    })) {
+      if (clientDisconnected || signal.aborted) break;
+      sseSend(res, event);
+      
+      // If agent paused (waiting for approval) or aborted, stop sending
+      if (event.type === 'agent_paused' || event.type === 'done') {
+        break;
       }
     }
 
     // Save conversation
-    if (saveConversation && !clientDisconnected) {
+    if (saveConversation && !clientDisconnected && conversationId) {
       try {
         const convId = conversationId || uuidv4();
         const lastUserMsg = messages[messages.length - 1];
 
         await addMessage(convId, { role: 'user', content: lastUserMsg?.content || '' });
-        await addMessage(convId, {
-          role: 'assistant',
-          content: fullResponseText,
-          model,
-          toolCalls: toolCallResults,
-        });
+        // Note: the full response is NOT saved here because the agent generates
+        // multiple turns. We save the user message only. Full save is done per-cycle.
 
         sseSend(res, { type: 'conversation_saved', conversationId: convId });
-
-        // Trigger Hermes self-reflection learning
-        if (lastUserMsg?.content) {
-          checkAndLearnFromPraise(lastUserMsg.content, [
-            ...messages,
-            { role: 'assistant', content: fullResponseText }
-          ]).catch(err => console.error('[Hermes Memory] trigger error:', err));
-        }
       } catch (saveErr) {
         console.error('[stream] Save error:', saveErr.message);
       }
     }
 
-    sseSend(res, { type: 'done', toolCalls: toolCallResults });
     sseEnd(res);
 
   } catch (err) {
     console.error('[stream] Fatal error:', err);
     sseSend(res, { type: 'error', message: err.message });
     sseEnd(res);
+  } finally {
+    if (conversationId) {
+      unregisterStream(conversationId);
+    }
   }
+});
+
+// ─── POST /api/stream/approve — Resume agent after approval ─────────────────
+router.post('/stream/approve', async (req, res) => {
+  // This endpoint receives approved tool result and continues the agent loop
+  // Frontend calls this after user approves a tool
+  sseSetup(res);
+  
+  const {
+    conversationId,
+    commandId,
+    toolCall,
+    result,
+    provider,
+    model,
+    messages,
+    contextWindow = 128000,
+    permissionMode = 'balanced',
+  } = req.body;
+
+  if (!conversationId || !messages || !messages.length) {
+    sseSend(res, { type: 'error', message: 'Missing required fields' });
+    return sseEnd(res);
+  }
+
+  const abortController = new AbortController();
+  const signal = abortController.signal;
+  
+  req.on('close', () => abortController.abort());
+  registerStream(conversationId, abortController);
+
+  try {
+    // Add the approved tool result to messages
+    const resultContext = `Tool: ${toolCall.tool}\nParams: ${JSON.stringify(toolCall.params)}\nResult: ${JSON.stringify(result)}`;
+    const continuedMessages = [
+      ...messages,
+      { role: 'tool', content: resultContext }
+    ];
+
+    for await (const event of runAgentCycle({
+      provider,
+      model,
+      messages: continuedMessages,
+      contextWindow,
+      permissionMode,
+      conversationId,
+      signal
+    })) {
+      if (signal.aborted) break;
+      sseSend(res, event);
+      if (event.type === 'agent_paused' || event.type === 'done') break;
+    }
+
+    sseEnd(res);
+  } catch (err) {
+    sseSend(res, { type: 'error', message: err.message });
+    sseEnd(res);
+  } finally {
+    unregisterStream(conversationId);
+  }
+});
+
+// ─── POST /api/stream/stop — Stop agent execution ───────────────────────────
+router.post('/stream/stop', async (req, res) => {
+  const { conversationId } = req.body;
+  
+  if (!conversationId) {
+    return res.status(400).json({ error: 'conversationId required' });
+  }
+
+  const stopped = isStreamActive(conversationId);
+  if (stopped) {
+    // The abort will trigger automatically — just report status
+    return res.json({ stopped: true, conversationId });
+  }
+  
+  res.json({ stopped: false, conversationId, message: 'No active stream for this conversation' });
 });
 
 // ─── POST /api/chat — Non-streaming ──────────────────────────────────────────
@@ -512,7 +648,6 @@ router.get('/conversations/:id', async (req, res) => {
   }
 });
 
-// Support both PUT and PATCH for conversation update
 router.put('/conversations/:id', async (req, res) => {
   try {
     const updated = await updateConversation(req.params.id, req.body);
@@ -553,12 +688,10 @@ router.post('/approve-command', async (req, res) => {
   const { commandId } = req.body;
   if (!commandId) return res.status(400).json({ error: 'commandId required' });
 
-  // 1. Try to resolve using new pendingToolService (for generalized file & command HITL)
   const pendingTool = getPendingTool(commandId);
   if (pendingTool) {
     approvePendingTool(commandId);
     try {
-      // Force 'autonomous' permissionMode so that it executes immediately instead of queueing again
       const result = await executeToolCall(pendingTool.toolCall, null, 'autonomous', pendingTool.conversationId);
       return res.json({ approved: true, commandId, result });
     } catch (err) {
@@ -566,7 +699,6 @@ router.post('/approve-command', async (req, res) => {
     }
   }
 
-  // 2. Fallback to old pendingCommands registry
   const cmd = approvePendingCommand(commandId);
   if (!cmd) return res.status(404).json({ error: 'Command not found or already processed' });
 
@@ -578,7 +710,6 @@ router.post('/approve-command', async (req, res) => {
   }
 });
 
-// ─── POST /api/reject-command ─────────────────────────────────────────────────
 router.post('/reject-command', async (req, res) => {
   const { commandId } = req.body;
   if (!commandId) return res.status(400).json({ error: 'commandId required' });

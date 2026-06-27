@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Plus, Search, Settings, MessageSquare, Trash2, Edit3, ChevronDown, Zap } from 'lucide-react'
+import { Plus, Search, Settings, MessageSquare, Trash2, Edit3, ChevronDown, Zap, Loader2 } from 'lucide-react'
 import useChatStore from '../../stores/chatStore'
 import useFileStore from '../../stores/fileStore'
 import useProviderStore from '../../stores/providerStore'
@@ -13,7 +13,8 @@ export default function Sidebar({ onSettings }) {
   const {
     conversations, activeConversationId,
     createConversation, selectConversation,
-    deleteConversation, updateConversation
+    deleteConversation, updateConversation,
+    isAgentWorking
   } = useChatStore()
   const { activeProvider, activeModel, providers } = useProviderStore()
   
@@ -132,7 +133,11 @@ export default function Sidebar({ onSettings }) {
         onMouseLeave={() => setHoveredId(null)}
       >
         <div className="conv-item-icon">
-          <MessageSquare size={13} />
+          {isAgentWorking && isActive ? (
+            <Loader2 size={13} className="spin" style={{ color: 'var(--accent-primary)' }} />
+          ) : (
+            <MessageSquare size={13} />
+          )}
         </div>
         <div className="conv-item-body">
           {isEditing ? (

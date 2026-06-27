@@ -200,7 +200,7 @@ export const translations = {
 }
 
 export function useTranslation(languageState) {
-  const lang = languageState || 'vi'
+  const lang = languageState || 'en'
   return (key) => {
     return translations[lang]?.[key] || translations['en']?.[key] || key
   }

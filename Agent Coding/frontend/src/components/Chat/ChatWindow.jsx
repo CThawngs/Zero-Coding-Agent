@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { PanelLeft, PanelRight, Settings, Plus, Folder } from 'lucide-react'
+import { PanelLeft, PanelRight, Settings, Plus, Folder, Loader2 } from 'lucide-react'
 import useChatStore from '../../stores/chatStore'
 import useFileStore from '../../stores/fileStore'
 import useProviderStore from '../../stores/providerStore'
@@ -16,7 +16,8 @@ import './ChatWindow.css'
 export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarOpen, explorerOpen }) {
   const messagesEndRef = useRef(null)
   const workspace = useFileStore(state => state.workspace)
-  const { activeConversation, isStreaming, streamingContent, streamingMessageId, pendingApprovals } = useChatStore()
+  const setWorkspace = useFileStore(state => state.setWorkspace)
+  const { activeConversation, isStreaming, streamingContent, streamingMessageId, pendingApprovals, isAgentWorking } = useChatStore()
   const { activeProvider, activeModel } = useProviderStore()
   
   const language = useSettingsStore(state => state.language)
@@ -262,6 +263,24 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
           <ModelSelector />
         </div>
         <div className="chat-topbar-right">
+          {/* Change workspace button */}
+          <button
+            className="icon-btn"
+            onClick={async () => {
+              try {
+                const res = await api.selectDirectory()
+                if (res && res.success && res.path) {
+                  setWorkspace(res.path)
+                }
+              } catch (err) {
+                console.error("Failed to select workspace folder:", err)
+              }
+            }}
+            title={language === 'vi' ? 'Đổi workspace' : 'Change workspace'}
+            style={{ marginRight: '4px' }}
+          >
+            <Folder size={16} />
+          </button>
           <button
             className="icon-btn"
             onClick={onToggleSidebar}

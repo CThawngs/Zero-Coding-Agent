@@ -275,12 +275,15 @@ function ProviderSection({ pid }) {
 }
 
 function McpSection() {
-  const { servers, isLoading, error, fetchServers, addServer, deleteServer } = useMcpStore()
+  const { servers, isLoading, error, addError, addSuccess, fetchServers, addServer, deleteServer, clearAddError } = useMcpStore()
   const [id, setId] = useState('')
   const [command, setCommand] = useState('')
   const [argsStr, setArgsStr] = useState('')
   const [transport, setTransport] = useState('stdio')
   const [expandedServer, setExpandedServer] = useState(null)
+
+  const language = useSettingsStore(state => state.language)
+  const t = useTranslation(language)
 
   useEffect(() => {
     fetchServers()
@@ -296,6 +299,7 @@ function McpSection() {
       setId('')
       setCommand('')
       setArgsStr('')
+      clearAddError()
     }
   }
 
@@ -304,14 +308,16 @@ function McpSection() {
       <div className="settings-section">
         <h3>Model Context Protocol (MCP) Servers</h3>
         <p className="settings-desc">
-          Cấu hình các máy chủ MCP ngoài để tích hợp thêm các công cụ (tools) tự động cho AI Agent.
+          Configure external MCP servers to add more tools for the AI Agent.
         </p>
 
         {error && <p className="status-msg error">Error: {error}</p>}
+        {addError && <p className="status-msg error">Failed: {addError}</p>}
+        {addSuccess && <p className="status-msg success">✓ Server added successfully!</p>}
 
         <div className="mcp-servers-list">
           {Object.keys(servers).length === 0 ? (
-            <p className="empty-msg">Chưa cấu hình máy chủ MCP nào.</p>
+            <p className="empty-msg">No MCP servers configured.</p>
           ) : (
             Object.entries(servers).map(([sid, srv]) => (
               <div key={sid} className="mcp-server-card">
@@ -342,14 +348,14 @@ function McpSection() {
                 {expandedServer === sid && (
                   <div className="mcp-server-tools">
                     {srv.tools.length === 0 ? (
-                      <p className="empty-msg">Không có công cụ nào được export.</p>
+                      <p className="empty-msg">No tools exported.</p>
                     ) : (
                       srv.tools.map(t => (
                         <div key={t.name} className="mcp-tool-item">
                           <div className="mcp-tool-name">🛠️ {t.name}</div>
-                          <div className="mcp-tool-desc">{t.description || 'Không có mô tả'}</div>
+                          <div className="mcp-tool-desc">{t.description || 'No description'}</div>
                           <details className="mcp-tool-schema">
-                            <summary>Schema Tham Số</summary>
+                            <summary>Parameter Schema</summary>
                             <pre>{JSON.stringify(t.inputSchema, null, 2)}</pre>
                           </details>
                         </div>
@@ -363,9 +369,9 @@ function McpSection() {
         </div>
 
         <form onSubmit={handleAdd} className="add-mcp-form">
-          <h4>Thêm máy chủ MCP mới</h4>
+          <h4>Add New MCP Server</h4>
           <div className="form-group">
-            <label>Tên / ID Server</label>
+            <label>Server ID</label>
             <input 
               type="text" 
               className="settings-input" 
@@ -377,7 +383,7 @@ function McpSection() {
           </div>
           <div className="form-row">
             <div className="form-group flex-2">
-              <label>Lệnh chạy (Command)</label>
+              <label>Command</label>
               <input 
                 type="text" 
                 className="settings-input" 
@@ -394,13 +400,13 @@ function McpSection() {
                 value={transport}
                 onChange={e => setTransport(e.target.value)}
               >
-                <option value="stdio">stdio (Cục bộ)</option>
-                <option value="sse">SSE (Từ xa)</option>
+                <option value="stdio">stdio (Local)</option>
+                <option value="sse">SSE (Remote)</option>
               </select>
             </div>
           </div>
           <div className="form-group">
-            <label>Tham số (Arguments - cách nhau bằng dấu phẩy)</label>
+            <label>Arguments (comma-separated)</label>
             <input 
               type="text" 
               className="settings-input" 
@@ -409,8 +415,20 @@ function McpSection() {
               onChange={e => setArgsStr(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={isLoading} style={{ width: '100%', padding: '12px', marginTop: '8px', fontWeight: 600 }}>
-            {isLoading ? 'Đang thêm...' : 'Thêm Server'}
+          <button 
+            type="submit"
+            className="btn btn-primary"
+            disabled={isLoading}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              marginTop: '8px', 
+              fontWeight: 600,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.6 : 1
+            }}
+          >
+            {isLoading ? 'Adding...' : 'Add Server'}
           </button>
         </form>
       </div>
@@ -523,8 +541,8 @@ export default function SettingsModal({ onClose }) {
               <div className="settings-section">
                 <h3>GitHub Personal Access Token</h3>
                 <p className="settings-desc">
-                  Dùng để đọc private repositories và tăng rate limit.<br />
-                  Token cần có quyền: <code>repo</code>, <code>read:user</code>
+                  Used to read private repositories and increase rate limits.<br />
+                  Token requires permissions: <code>repo</code>, <code>read:user</code>
                 </p>
                 <div className="apikey-input-row">
                   <input
