@@ -1,18 +1,21 @@
 steps:
+  # Step 1: Build the Docker image with two tags
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/zero-coding-agent:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/zero-coding-agent:$COMMIT_SHA'
       - '-t'
       - 'gcr.io/$PROJECT_ID/zero-coding-agent:latest'
       - '.'
 
+  # Step 2: Push both tags
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'gcr.io/$PROJECT_ID/zero-coding-agent:latest'
 
+  # Step 3: Deploy to Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
@@ -32,4 +35,4 @@ steps:
           --allow-unauthenticated
 
 images:
-  - 'gcr.io/$PROJECT_ID/zero-coding-agent'
+  - 'gcr.io/$PROJECT_ID/zero-coding-agent:latest'
