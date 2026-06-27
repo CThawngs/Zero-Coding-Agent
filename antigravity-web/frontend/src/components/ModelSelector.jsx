@@ -5,11 +5,11 @@ import './ModelSelector.css'
 
 const PROVIDER_ICONS = {
   google: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
-  openai: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+  openai: '/openai.png',
   anthropic: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude-color.svg',
-  openrouter: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
-  ollama: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
-  lmstudio: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+  openrouter: '/openrouter.png',
+  ollama: '/ollama.png',
+  lmstudio: '/lmstudio.png',
   custom: null,
   '9router': '/nine-router.png',
 }

@@ -17,7 +17,7 @@ export const PROVIDER_MODELS = {
   },
   openai: {
     name: 'OpenAI',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai-color.svg',
+    icon: '/openai.png',
     color: '#10a37f',
     models: [
       { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000, free: false },
@@ -42,19 +42,19 @@ export const PROVIDER_MODELS = {
   },
   openrouter: {
     name: 'OpenRouter',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter-color.svg',
+    icon: '/openrouter.png',
     color: '#7c3aed',
     models: [] // Dynamic / user-added
   },
   ollama: {
     name: 'Ollama',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama-color.svg',
+    icon: '/ollama.png',
     color: '#f97316',
     models: [] // Detected locally
   },
   lmstudio: {
     name: 'LM Studio',
-    icon: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons/lmstudio-color.svg',
+    icon: '/lmstudio.png',
     color: '#06b6d4',
     models: [] // Detected locally
   },
