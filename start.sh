@@ -13,23 +13,23 @@ then
 fi
 
 # Install backend dependencies if not present
-if [ ! -d "antigravity-web/backend/node_modules" ]; then
+if [ ! -d "Agent Coding/backend/node_modules" ]; then
     echo "Installing backend dependencies, please wait..."
-    cd antigravity-web/backend
+    cd "Agent Coding/backend"
     npm install
     cd ../..
 fi
 
 # Install frontend dependencies if not present
-if [ ! -d "antigravity-web/frontend/node_modules" ]; then
+if [ ! -d "Agent Coding/frontend/node_modules" ]; then
     echo "Installing frontend dependencies, please wait..."
-    cd antigravity-web/frontend
+    cd "Agent Coding/frontend"
     npm install --no-audit --no-fund
     cd ../..
 fi
 
 echo "Starting backend server on http://localhost:3747..."
-cd antigravity-web/backend
+cd "Agent Coding/backend"
 
 # Automatically open the browser based on OS
 if [[ "$OSTYPE" == "darwin"* ]]; then

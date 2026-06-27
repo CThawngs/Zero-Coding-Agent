@@ -12,23 +12,23 @@ if %errorlevel% neq 0 (
 )
 
 :: Check if backend node_modules is installed
-if not exist "antigravity-web\backend\node_modules" (
+if not exist "Agent Coding\backend\node_modules" (
     echo Installing backend dependencies, please wait...
-    cd "antigravity-web\backend"
+    cd "Agent Coding\backend"
     call npm install
     cd /d "%~dp0"
 )
 
 :: Check if frontend node_modules is installed
-if not exist "antigravity-web\frontend\node_modules" (
+if not exist "Agent Coding\frontend\node_modules" (
     echo Installing frontend dependencies, please wait...
-    cd "antigravity-web\frontend"
+    cd "Agent Coding\frontend"
     call npm install --no-audit --no-fund
     cd /d "%~dp0"
 )
 
 echo Starting backend server on http://localhost:3747...
-cd "antigravity-web\backend"
+cd "Agent Coding\backend"
 
 :: Open browser
 start "" http://localhost:3747

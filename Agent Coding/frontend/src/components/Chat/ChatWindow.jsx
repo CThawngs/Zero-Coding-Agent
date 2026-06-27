@@ -47,13 +47,13 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
         {/* Minimal topbar */}
         <div className="chat-topbar">
           <div className="chat-topbar-left">
-            <button className="icon-btn" onClick={onToggleSidebar} title={sidebarOpen ? t('hideSidebar') : t('showSidebar')}>
+            <button className="icon-btn" onClick={onToggleExplorer} title={explorerOpen ? t('hideExplorer') : t('showExplorer')}>
               <PanelLeft size={18} />
             </button>
             <span className="chat-title">Zero Coding Agent</span>
           </div>
           <div className="chat-topbar-right">
-            <button className="icon-btn" onClick={onToggleExplorer} title={explorerOpen ? t('hideExplorer') : t('showExplorer')}>
+            <button className="icon-btn" onClick={onToggleSidebar} title={sidebarOpen ? t('hideSidebar') : t('showSidebar')}>
               <PanelRight size={18} />
             </button>
           </div>
@@ -249,8 +249,8 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
         <div className="chat-topbar-left">
           <button
             className="icon-btn"
-            onClick={onToggleSidebar}
-            title={sidebarOpen ? t('hideSidebar') : t('showSidebar')}
+            onClick={onToggleExplorer}
+            title={explorerOpen ? t('hideExplorer') : t('showExplorer')}
           >
             <PanelLeft size={18} />
           </button>
@@ -264,8 +264,8 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
         <div className="chat-topbar-right">
           <button
             className="icon-btn"
-            onClick={onToggleExplorer}
-            title={explorerOpen ? t('hideExplorer') : t('showExplorer')}
+            onClick={onToggleSidebar}
+            title={sidebarOpen ? t('hideSidebar') : t('showSidebar')}
           >
             <PanelRight size={18} />
           </button>

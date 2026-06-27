@@ -5,7 +5,7 @@ const useSettingsStore = create(
   persist(
     (set) => ({
       theme: 'dark',
-      language: 'vi',
+      language: 'en',
       setTheme: (theme) => {
         set({ theme })
         // Apply theme to document body
