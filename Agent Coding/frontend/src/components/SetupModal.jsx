@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, ChevronRight, Check } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
+import { useTranslation } from '../utils/translations'
 import './SetupModal.css'
 
 const PROVIDER_IDS = ['google', 'openai', 'anthropic', 'openrouter', 'ollama', 'lmstudio', '9router', 'custom']
@@ -35,6 +36,7 @@ export default function SetupModal({ onComplete }) {
   const [baseUrl, setBaseUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const t = useTranslation()
 
   const { saveApiKey, connectOllama, connectLMStudio, selectProvider, selectModel, getModelsForProvider } = useProviderStore()
 
@@ -116,8 +118,8 @@ export default function SetupModal({ onComplete }) {
 
             {step === 0 && (
               <div className="setup-step">
-                <h2>Chọn AI Provider</h2>
-                <p className="setup-desc">Chọn provider bạn muốn dùng để bắt đầu</p>
+                <h2>{t('chooseProvider')}</h2>
+                <p className="setup-desc">{t('chooseDesc')}</p>
                 <div className="provider-grid">
                   {PROVIDER_IDS.map(pid => (
                     <button
@@ -147,7 +149,7 @@ export default function SetupModal({ onComplete }) {
                   disabled={!selectedProvider}
                   onClick={handleNext}
                 >
-                  Tiếp tục <ChevronRight size={16} />
+                  {t('continue')} <ChevronRight size={16} />
                 </button>
               </div>
             )}
@@ -256,14 +258,14 @@ export default function SetupModal({ onComplete }) {
             )}
 
             <button className="setup-skip" onClick={onComplete}>
-              Bỏ qua, thiết lập sau
+              {t('skip')}
             </button>
           </>
         ) : (
           <div className="setup-done">
             <div className="done-check">✓</div>
-            <h2>Sẵn sàng!</h2>
-            <p>Zero Coding Agent đã được cấu hình. Bắt đầu chat ngay!</p>
+            <h2>{t('ready')}</h2>
+            <p>{t('setupDoneDesc')}</p>
           </div>
         )}
       </div>

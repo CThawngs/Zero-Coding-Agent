@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { ChevronDown } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
+import { useTranslation } from '../utils/translations'
 import './ModelSelector.css'
 
 const PROVIDER_ICONS = {
@@ -18,6 +19,7 @@ export default function ModelSelector() {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef(null)
+  const t = useTranslation()
   const {
     activeProvider, activeModel, providers,
     selectProvider, selectModel, getModelsForProvider,
@@ -35,7 +37,7 @@ export default function ModelSelector() {
   const providerList = Object.entries(PROVIDER_MODELS)
 
   const getModelLabel = () => {
-    if (!activeProvider || !activeModel) return 'Chọn model'
+    if (!activeProvider || !activeModel) return t('selectModelText')
     const icon = PROVIDER_ICONS[activeProvider]
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -130,10 +132,11 @@ export default function ModelSelector() {
                     </button>
                   ))}
                   {models.length === 0 && (
-                    <div className="no-models">
-                      {pid === 'openrouter' ? 'Thêm model trong Settings' :
-                       pid === 'ollama' || pid === 'lmstudio' ? 'Kết nối trong Settings' :
-                       'Chưa cấu hình API key'}
+                    <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
+                      <div>{t('noModelsInSettings')}</div>
+                      {pid !== 'openrouter' && pid !== 'ollama' && pid !== 'lmstudio' && (
+                        <div style={{marginTop: 2}}>{t('noApiKeyConfigured')}</div>
+                      )}
                     </div>
                   )}
                 </div>

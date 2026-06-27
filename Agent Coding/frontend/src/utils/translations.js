@@ -36,6 +36,8 @@ export const translations = {
     connecting: 'Đang kết nối...',
     saveAndContinue: 'Lưu & Tiếp tục',
     setupDoneDesc: 'Zero Coding Agent đã được cấu hình. Bắt đầu chat ngay!',
+    noModelsInSettings: 'Thêm model trong Settings',
+    noApiKeyConfigured: 'Chưa cấu hình API key',
     
     // Settings Modal
     settingsTitle: 'Cài đặt hệ thống',
@@ -135,6 +137,8 @@ export const translations = {
     connecting: 'Connecting...',
     saveAndContinue: 'Save & Continue',
     setupDoneDesc: 'Zero Coding Agent has been configured. Start chatting now!',
+    noModelsInSettings: 'Add model in Settings',
+    noApiKeyConfigured: 'API key not configured',
     
     // Settings Modal
     settingsTitle: 'System Settings',
