@@ -37,7 +37,13 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5743';
 
 // Middleware
 app.use(cors({
-  origin: [FRONTEND_URL, 'http://localhost:5743', 'http://127.0.0.1:5743', 'http://localhost:5174'],
+  origin: [
+    FRONTEND_URL, 
+    'http://localhost:5743', 
+    'http://127.0.0.1:5743', 
+    'http://localhost:5174', 
+    'https://zero-coding-agent-493920320186.us-central1.run.app'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -88,6 +94,18 @@ app.get('/.well-known/agent-card.json', (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+});
+
+// Serve static frontend files
+const distPath = join(__dirname, '../public');
+app.use(express.static(distPath));
+
+// Fallback all other GET requests to index.html (for React Router)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+    return next();
+  }
+  res.sendFile(join(distPath, 'index.html'));
 });
 
 // WebSocket for file watching

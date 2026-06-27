@@ -2,7 +2,17 @@
 // API Client for Antigravity Backend (port 3747)
 // ============================================================
 
-const BASE_URL = '/api'
+let BASE_URL = '/api';
+
+if (typeof window !== 'undefined') {
+  const isCloud = window.location.hostname !== 'localhost' && 
+                  window.location.hostname !== '127.0.0.1' && 
+                  window.location.hostname !== '[::1]';
+  if (isCloud) {
+    // Connect Cloud-hosted UI to user's Local Agent backend running on port 3747
+    BASE_URL = 'http://localhost:3747/api';
+  }
+}
 
 class ApiError extends Error {
   constructor(message, status, data) {
