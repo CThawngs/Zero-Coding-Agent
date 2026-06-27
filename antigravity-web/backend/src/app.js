@@ -37,13 +37,20 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5743';
 
 // Middleware
 app.use(cors({
-  origin: [
-    FRONTEND_URL, 
-    'http://localhost:5743', 
-    'http://127.0.0.1:5743', 
-    'http://localhost:5174', 
-    'https://zero-coding-agent-493920320186.us-central1.run.app'
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const isLocal = origin.startsWith('http://localhost') || 
+                    origin.startsWith('http://127.0.0.1') || 
+                    origin.startsWith('http://[::1]') ||
+                    origin.startsWith('http://192.168.');
+    const isCloudRun = origin.endsWith('.run.app');
+    
+    if (isLocal || isCloudRun) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
