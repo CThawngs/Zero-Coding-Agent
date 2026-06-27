@@ -41,6 +41,19 @@ export default function App() {
     }
     // Load conversations
     loadConversations()
+
+    // Automatically load default workspace on localhost if not set
+    const isCloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    if (!workspace && !isCloud) {
+      fetch('/api/files/default-workspace')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.success && data.path) {
+            useFileStore.getState().setWorkspace(data.path)
+          }
+        })
+        .catch(err => console.error('Failed to load default workspace:', err))
+    }
   }, [])
 
   const handleSetupComplete = () => {

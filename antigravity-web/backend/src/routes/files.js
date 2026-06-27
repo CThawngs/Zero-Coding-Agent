@@ -262,6 +262,16 @@ router.post('/resolve-folder', async (req, res) => {
   }
 });
 
+router.get('/default-workspace', async (req, res) => {
+  try {
+    const { resolve, join } = await import('path');
+    const defaultWorkspace = resolve(join(process.cwd(), '..'));
+    res.json({ success: true, path: defaultWorkspace });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const execAsync = promisify(exec);
 
 router.post('/select-directory', async (req, res) => {
