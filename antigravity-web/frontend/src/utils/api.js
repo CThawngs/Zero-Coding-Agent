@@ -8,9 +8,14 @@ if (typeof window !== 'undefined') {
   const isCloud = window.location.hostname !== 'localhost' && 
                   window.location.hostname !== '127.0.0.1' && 
                   window.location.hostname !== '[::1]';
-  if (isCloud) {
-    // Connect Cloud-hosted UI to user's Local Agent backend running on port 3747
+                  
+  const savedMode = localStorage.getItem('antigravity_conn_mode');
+  const connMode = savedMode || (isCloud ? 'cloud' : 'local');
+  
+  if (connMode === 'local') {
     BASE_URL = 'http://localhost:3747/api';
+  } else {
+    BASE_URL = '/api';
   }
 }
 
@@ -64,6 +69,18 @@ async function request(endpoint, options = {}) {
 // API Methods
 // ============================================================
 export const api = {
+  getConnectionMode: () => {
+    if (typeof window === 'undefined') return 'local';
+    const isCloud = window.location.hostname !== 'localhost' && 
+                    window.location.hostname !== '127.0.0.1' && 
+                    window.location.hostname !== '[::1]';
+    return localStorage.getItem('antigravity_conn_mode') || (isCloud ? 'cloud' : 'local');
+  },
+  setConnectionMode: (mode) => {
+    localStorage.setItem('antigravity_conn_mode', mode);
+    window.location.reload();
+  },
+
   // --- Conversations ---
   // Backend routes: GET/POST /api/conversations, GET/PUT/DELETE /api/conversations/:id
   getConversations: () => request('/conversations'),
@@ -114,6 +131,9 @@ export const api = {
     request('/files/resolve-folder', { method: 'POST', body: { folderName } }),
   selectDirectory: () =>
     request('/files/select-directory', { method: 'POST' }),
+  downloadWorkspace: (workspacePath) => {
+    return `${BASE_URL}/files/download?path=${encodeURIComponent(workspacePath)}`;
+  },
 
   // --- Terminal Approval ---
   approveCommand: (commandId) =>

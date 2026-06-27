@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { FolderOpen, ChevronRight, ChevronDown, File, Folder, FolderOpen as FolderOpenIcon,
-  RefreshCw, FilePlus, FolderPlus, Trash2, Edit3 } from 'lucide-react'
+  RefreshCw, FilePlus, FolderPlus, Trash2, Edit3, Download } from 'lucide-react'
 import useFileStore from '../../stores/fileStore'
 import useSettingsStore from '../../stores/settingsStore'
 import { useTranslation } from '../../utils/translations'
@@ -16,6 +16,20 @@ export default function FileExplorer() {
   const t = useTranslation(language)
 
   const handleOpenFolder = async () => {
+    const connMode = api.getConnectionMode()
+    if (connMode === 'cloud') {
+      const folderName = prompt(
+        language === 'vi' 
+          ? 'Nhập tên thư mục dự án Sandbox trên Cloud (ví dụ: project-2):' 
+          : 'Enter Cloud Sandbox project directory name (e.g., project-2):',
+        'project-1'
+      )
+      if (folderName && folderName.trim()) {
+        setWorkspace(`./workspace/${folderName.trim()}`)
+      }
+      return
+    }
+
     try {
       const res = await api.selectDirectory()
       if (res && res.success && res.path) {
@@ -41,6 +55,19 @@ export default function FileExplorer() {
           <button className="icon-btn" onClick={refreshTree} title={t('refreshBtn') || 'Refresh'}>
             <RefreshCw size={14} />
           </button>
+          {api.getConnectionMode() === 'cloud' && workspace && (
+            <button 
+              className="icon-btn" 
+              onClick={() => {
+                const url = api.downloadWorkspace(workspace)
+                window.open(url, '_blank')
+              }} 
+              title={language === 'vi' ? 'Tải xuống ZIP dự án' : 'Download project ZIP'}
+              style={{ color: 'var(--success)' }}
+            >
+              <Download size={14} />
+            </button>
+          )}
         </div>
       </div>
 

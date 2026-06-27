@@ -312,4 +312,53 @@ router.post('/select-directory', async (req, res) => {
   }
 });
 
+router.get('/download', async (req, res) => {
+  const { path: wsPath } = req.query;
+  if (!wsPath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    const { resolve, basename, dirname } = await import('path');
+    const { existsSync } = await import('fs');
+    const resolvedPath = resolve(wsPath);
+
+    if (!existsSync(resolvedPath)) {
+      return res.status(404).json({ error: 'Workspace folder not found' });
+    }
+
+    const archiveName = `${basename(resolvedPath)}.tar.gz`;
+    const isWin = process.platform === 'win32';
+    
+    // Create a temporary file path
+    const tempDir = process.platform === 'win32' ? process.env.TEMP : '/tmp';
+    const tempArchive = resolve(tempDir, `${Date.now()}-${archiveName}`);
+
+    let cmd;
+    if (isWin) {
+      // Windows PowerShell tar command
+      cmd = `tar -czf "${tempArchive}" -C "${dirname(resolvedPath)}" "${basename(resolvedPath)}"`;
+    } else {
+      // Linux tar command
+      cmd = `tar -czf "${tempArchive}" -C "${dirname(resolvedPath)}" "${basename(resolvedPath)}"`;
+    }
+
+    exec(cmd, (err) => {
+      if (err) {
+        console.error("[Download] tar error:", err);
+        return res.status(500).json({ error: 'Failed to compress workspace folder' });
+      }
+
+      res.download(tempArchive, archiveName, async (err) => {
+        try {
+          const { promises: fsPromises } = await import('fs');
+          if (existsSync(tempArchive)) {
+            await fsPromises.unlink(tempArchive);
+          }
+        } catch {}
+      });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

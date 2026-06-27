@@ -35,6 +35,13 @@ export default function Sidebar({ onSettings }) {
 
   const handleNewChat = async () => {
     if (!workspace) {
+      const connMode = api.getConnectionMode()
+      if (connMode === 'cloud') {
+        useFileStore.getState().setWorkspace('./workspace/project-1')
+        await createConversation('New Chat')
+        return
+      }
+
       try {
         const res = await api.selectDirectory()
         if (res && res.success && res.path) {
