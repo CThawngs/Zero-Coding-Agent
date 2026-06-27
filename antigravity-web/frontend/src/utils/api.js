@@ -112,6 +112,8 @@ export const api = {
     request('/files/drives'),
   resolveFolder: (folderName) =>
     request('/files/resolve-folder', { method: 'POST', body: { folderName } }),
+  selectDirectory: () =>
+    request('/files/select-directory', { method: 'POST' }),
 
   // --- Terminal Approval ---
   approveCommand: (commandId) =>

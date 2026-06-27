@@ -82,24 +82,15 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
             </div>
             <button 
               className="btn btn-primary" 
-              onClick={() => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.webkitdirectory = true
-                input.onchange = async (e) => {
-                  const files = Array.from(e.target.files || [])
-                  if (files.length === 0) return
-                  const folderName = files[0].webkitRelativePath.split('/')[0]
-                  try {
-                    const res = await api.resolveFolder(folderName)
-                    if (res && res.path) {
-                      useFileStore.getState().setWorkspace(res.path)
-                    }
-                  } catch (err) {
-                    console.error("Failed to resolve workspace folder:", err)
+              onClick={async () => {
+                try {
+                  const res = await api.selectDirectory()
+                  if (res && res.success && res.path) {
+                    useFileStore.getState().setWorkspace(res.path)
                   }
+                } catch (err) {
+                  console.error("Failed to select workspace folder:", err)
                 }
-                input.click()
               }}
               style={{ padding: '12px 24px', fontSize: '14px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)' }}
             >

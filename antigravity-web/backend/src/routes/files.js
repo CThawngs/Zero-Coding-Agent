@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import {
   readFile,
   writeFile,
@@ -256,6 +258,56 @@ router.post('/resolve-folder', async (req, res) => {
 
     res.json({ success: true, path: resolvedPath });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const execAsync = promisify(exec);
+
+router.post('/select-directory', async (req, res) => {
+  try {
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+    
+    let selectedPath = null;
+    
+    if (isWin) {
+      // PowerShell script to open FolderBrowserDialog
+      const psScript = `
+        Add-Type -AssemblyName System.Windows.Forms;
+        $f = New-Object System.Windows.Forms.FolderBrowserDialog;
+        $f.Description = "Select Workspace Folder for Zero Coding Agent";
+        $f.ShowNewFolderButton = $true;
+        $result = $f.ShowDialog();
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+          $f.SelectedPath
+        }
+      `;
+      const { stdout, stderr } = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`);
+      if (stderr) {
+        console.error("[SelectDirectory] PowerShell stderr:", stderr);
+      }
+      selectedPath = stdout.trim();
+    } else if (isMac) {
+      const appleScript = `osascript -e 'POSIX path of (choose folder with prompt "Select Workspace Folder for Zero Coding Agent")'`;
+      const { stdout } = await execAsync(appleScript);
+      selectedPath = stdout.trim();
+    } else {
+      try {
+        const { stdout } = await execAsync('zenity --file-selection --directory --title="Select Workspace Folder for Zero Coding Agent"');
+        selectedPath = stdout.trim();
+      } catch (err) {
+        selectedPath = process.env.HOME || '/';
+      }
+    }
+    
+    if (selectedPath) {
+      res.json({ success: true, path: selectedPath });
+    } else {
+      res.json({ success: false, message: 'Selection cancelled or failed' });
+    }
+  } catch (err) {
+    console.error("[SelectDirectory] Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
