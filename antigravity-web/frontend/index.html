@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Zero Coding Agent - AI Coding Agent Platform. Chat with AI models, edit files directly on your machine." />
+    <meta name="theme-color" content="#0a0b0f" />
+    <title>Zero Coding Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      html, body { margin: 0; padding: 0; background: #0a0b0f; color: #f1f5f9; }
+      #root { height: 100vh; overflow: hidden; }
+      /* Critical loading state */
+      .init-loader {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+        background: #0a0b0f; z-index: 9999;
+      }
+      .init-loader-content { text-align: center; }
+      .init-loader h1 { 
+        font-family: 'Inter', sans-serif; font-size: 2rem; font-weight: 700;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 1rem;
+      }
+      .init-loader-bar {
+        width: 200px; height: 2px; background: rgba(255,255,255,0.1);
+        border-radius: 1px; overflow: hidden; margin: 0 auto;
+      }
+      .init-loader-progress {
+        height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        animation: loader-slide 1.5s ease-in-out infinite;
+        border-radius: 1px;
+      }
+      @keyframes loader-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(300%); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="init-loader">
+        <div class="init-loader-content">
+          <h1>⚡ Zero Coding Agent</h1>
+          <div class="init-loader-bar">
+            <div class="init-loader-progress"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

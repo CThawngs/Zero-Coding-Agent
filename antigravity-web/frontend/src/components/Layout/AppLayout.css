@@ -1,0 +1,89 @@
+.app-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+/* --- Sidebar Panel --- */
+.sidebar-panel {
+  height: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-panel.collapsed {
+  width: 0 !important;
+  border-right: none;
+}
+
+/* --- Chat Panel --- */
+.chat-panel {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* --- Explorer Panel --- */
+.explorer-panel {
+  height: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+}
+
+.explorer-panel.collapsed {
+  width: 0 !important;
+  border-left: none;
+}
+
+/* --- Resize Handle Overrides in Layout --- */
+.app-layout .resize-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  transition: background 150ms ease;
+}
+
+.app-layout .resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+  transition: background 150ms ease, width 150ms ease;
+}
+
+.app-layout .resize-handle:hover::after {
+  background: var(--accent-primary);
+  width: 2px;
+  left: 1.5px;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+
+.app-layout .resize-handle:active::after {
+  background: var(--accent-primary);
+  width: 2px;
+}
+
+.sidebar-panel.no-transition,
+.explorer-panel.no-transition {
+  transition: none !important;
+}

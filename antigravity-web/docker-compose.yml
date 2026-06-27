@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3747:3747"
+    volumes:
+      - backend-data:/app/data
+      - ./skills:/app/skills:ro
+    environment:
+      - PORT=3747
+      - FRONTEND_URL=http://localhost:5743
+      - DATA_DIR=./data
+      # Set API keys here or configure via the UI
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5743:5743"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:
