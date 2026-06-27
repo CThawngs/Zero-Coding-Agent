@@ -31,7 +31,7 @@ steps:
           --max-instances 3 \
           --concurrency 80 \
           --timeout 600 \
-          --set-env-vars "NODE_ENV=production,PORT=8080,DATA_DIR=/app/data" \
+          --set-env-vars "NODE_ENV=production,DATA_DIR=/app/data" \
           --allow-unauthenticated
 
 images:
