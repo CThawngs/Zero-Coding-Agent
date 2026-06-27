@@ -21,6 +21,7 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
   
   const language = useSettingsStore(state => state.language)
   const t = useTranslation(language)
+  const [manualPath, setManualPath] = useState('')
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -105,6 +106,47 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
               <Folder size={16} />
               {language === 'vi' ? 'Mở Thư mục làm việc' : 'Open Workspace Folder'}
             </button>
+
+            {/* Or manual input */}
+            <div style={{ width: '100%', borderTop: '1px solid var(--border)', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                {language === 'vi' ? 'Hoặc nhập đường dẫn tuyệt đối thư mục local:' : 'Or enter local absolute path manually:'}
+              </p>
+              <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                <input 
+                  type="text"
+                  placeholder={language === 'vi' ? 'Ví dụ: C:\\Projects\\MyAwesomeApp' : 'Example: C:\\Projects\\MyAwesomeApp'}
+                  value={manualPath}
+                  onChange={(e) => setManualPath(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    transition: 'border 0.2s ease',
+                    textAlign: 'left'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (manualPath.trim()) {
+                      useFileStore.getState().setWorkspace(manualPath.trim())
+                    }
+                  }}
+                  style={{ padding: '0 16px', fontSize: '13px', borderRadius: '8px' }}
+                >
+                  {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
