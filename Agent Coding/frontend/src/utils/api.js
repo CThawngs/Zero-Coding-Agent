@@ -128,8 +128,36 @@ export const api = {
     request('/files/drives'),
   resolveFolder: (folderName) =>
     request('/files/resolve-folder', { method: 'POST', body: { folderName } }),
-  selectDirectory: () =>
-    request('/files/select-directory', { method: 'POST' }),
+  selectDirectory: async () => {
+    // Try browser-native File System Access API first (Chrome/Edge/Opera)
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
+        // Store handle for future OPFS/file operations in browser
+        window.__workspaceHandle = handle
+        // Get the full path via the backend if available (local mode), otherwise use name
+        try {
+          const dirPath = await request('/files/resolve-directory', {
+            method: 'POST',
+            body: { name: handle.name }
+          })
+          if (dirPath && dirPath.path) {
+            return { success: true, path: dirPath.path }
+          }
+        } catch {
+          // Fallback: just use the directory name as workspace name
+        }
+        return { success: true, path: `./workspace/${handle.name}` }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('showDirectoryPicker failed:', err)
+        }
+        return { success: false, message: 'Selection cancelled' }
+      }
+    }
+    // Fallback: server-side directory picker (PowerShell on local backend)
+    return request('/files/select-directory', { method: 'POST' })
+  },
   downloadWorkspace: (workspacePath) => {
     return `${BASE_URL}/files/download?path=${encodeURIComponent(workspacePath)}`;
   },

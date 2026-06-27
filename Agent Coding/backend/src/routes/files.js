@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { existsSync, statSync } from 'fs';
+import { resolve } from 'path';
 import {
   readFile,
   writeFile,
@@ -278,6 +280,7 @@ router.post('/select-directory', async (req, res) => {
   try {
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
+    const isLinux = process.platform === 'linux';
     
     let selectedPath = null;
     
@@ -303,18 +306,21 @@ router.post('/select-directory', async (req, res) => {
       const { stdout } = await execAsync(appleScript);
       selectedPath = stdout.trim();
     } else {
+      // Linux / Cloud Run — try zenity, fallback to workspace name
       try {
         const { stdout } = await execAsync('zenity --file-selection --directory --title="Select Workspace Folder for Zero Coding Agent"');
         selectedPath = stdout.trim();
-      } catch (err) {
-        selectedPath = process.env.HOME || '/';
+      } catch {
+        // zenity not available (Cloud Run), use name from body
+        selectedPath = null;
       }
     }
     
     if (selectedPath) {
       res.json({ success: true, path: selectedPath });
     } else {
-      res.json({ success: false, message: 'Selection cancelled or failed' });
+      // Fallback: use folder name from request body as virtual workspace
+      res.json({ success: true, path: `./workspace/${req.body.name || 'project'}` });
     }
   } catch (err) {
     console.error("[SelectDirectory] Error:", err.message);
@@ -322,6 +328,40 @@ router.post('/select-directory', async (req, res) => {
   }
 });
 
+// ─── POST /api/files/resolve-directory ─────────────────────────────────
+router.post('/resolve-directory', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.json({ path: null });
+
+    // On Windows, try to find a matching open Explorer folder or recent path
+    if (process.platform === 'win32') {
+      const psScript = `
+        Add-Type -AssemblyName System.Windows.Forms;
+        $f = New-Object System.Windows.Forms.FolderBrowserDialog;
+        $f.Description = "Select '${name}' workspace folder";
+        $f.SelectedPath = "";
+        $f.ShowNewFolderButton = $false;
+        $result = $f.ShowDialog();
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+          $f.SelectedPath
+        }
+      `;
+      const { stdout } = await execAsync(
+        `powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`
+      );
+      const selectedPath = stdout.trim();
+      if (selectedPath) {
+        return res.json({ path: selectedPath });
+      }
+    }
+
+    // Fallback on any platform: just return the name as workspace identifier
+    res.json({ path: null });
+  } catch {
+    res.json({ path: null });
+  }
+});
 router.get('/download', async (req, res) => {
   const { path: wsPath } = req.query;
   if (!wsPath) return res.status(400).json({ error: 'path is required' });
