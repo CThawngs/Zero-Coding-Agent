@@ -211,6 +211,21 @@ export default function MessageItem({ message, isStreaming, streamingContent }) 
           )}
         </div>
 
+        {/* Activity Log — shows agent progress (multi-step work) */}
+        {message.activityLog && message.activityLog.length > 0 && (
+          <div className="activity-log">
+            <div className="activity-log-header">⚡ Agent Activity</div>
+            <div className="activity-log-list">
+              {message.activityLog.map((act, i) => (
+                <div key={i} className="activity-log-item">
+                  <span className="activity-log-dot" />
+                  <span className="activity-log-text">{act.message}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Tool calls */}
         {toolCalls.length > 0 && (
           <div className="message-tool-calls">

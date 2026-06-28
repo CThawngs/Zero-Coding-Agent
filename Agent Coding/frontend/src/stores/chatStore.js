@@ -46,6 +46,7 @@ const useChatStore = create((set, get) => ({
   streamingContent: '',
   streamingMessageId: null,
   pendingApprovals: [],
+  activityLog: [],
   error: null,
   activeStreams: {},            // conversationId -> { abortController, streamingContent, streamingMessageId, isAgentWorking, isStreaming, agentStatus, agentIterationCount }
   // Agent loop state
@@ -403,6 +404,24 @@ const useChatStore = create((set, get) => ({
               } : {})
             }
           })
+        },        // onActivity - agent progress log
+        (activityMsg, iteration) => {
+          set(state => {
+            const currentStream = state.activeStreams[convId] || {}
+            const newActivity = [...(currentStream.activityLog || []), { message: activityMsg, iteration, timestamp: Date.now() }]
+            const nextStreams = {
+              ...state.activeStreams,
+              [convId]: {
+                ...currentStream,
+                activityLog: newActivity,
+              }
+            }
+            const isCurrent = state.activeConversationId === convId
+            return {
+              activeStreams: nextStreams,
+              ...(isCurrent ? { activityLog: newActivity } : {})
+            }
+          })
         },
         // onDone
         (finalContent, toolCalls, extra) => {
@@ -412,6 +431,7 @@ const useChatStore = create((set, get) => ({
             role: 'assistant',
             content: finalContent || currentStream.streamingContent || '',
             toolCalls: toolCalls || [],
+            activityLog: currentStream.activityLog || [],
             timestamp: new Date().toISOString(),
           }
 

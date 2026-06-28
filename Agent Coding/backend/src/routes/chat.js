@@ -288,7 +288,6 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
 
 // ─── Agent Loop: one full user message cycle ────────────────────
 async function* runAgentCycle({ provider, model, messages, contextWindow, customApiKey, customBaseURL, permissionMode, conversationId, signal }) {
-  // Track iteration for the loop
   let iterationCount = 0;
   let currentMessages = messages;
   let finalResponseText = '';
@@ -312,25 +311,6 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
           yield { type: 'delta', content: event.content || '' };
           break;
 
-        case 'tool_call': {
-          const tcId = event.id || uuidv4();
-          yield { type: 'tool_call', id: tcId, tool: event.tool, params: event.params };
-          const result = await executeToolCall(event, null, permissionMode, conversationId);
-          toolCallResults.push({ id: tcId, tool: event.tool, params: event.params, result });
-          if (!result.pending) {
-            yield { type: 'tool_result', id: tcId, result };
-          } else {
-            // Pending tool approval → pause loop, wait for user
-            yield { type: 'approval_required', commandId: result.commandId, tool: event.tool, params: event.params };
-            // Don't continue loop — human needs to approve
-            yield { type: 'agent_paused', message: 'Waiting for user approval...' };
-            finalResponseText += responseText;
-            yield { type: 'done', content: responseText || finalResponseText, toolCalls: [...allToolCallResults, ...toolCallResults], paused: true };
-            return;
-          }
-          break;
-        }
-
         case 'usage':
           yield { type: 'usage', usage: event.usage };
           break;
@@ -339,7 +319,6 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
           yield { type: 'error', message: event.message };
           break;
 
-        case 'done':
         default:
           break;
       }
@@ -347,19 +326,33 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
 
     if (signal?.aborted) break;
 
-    // Parse tool calls from text
+    // Parse tool calls from the response text
     const parsedToolCalls = parseToolCallsFromText(responseText);
-    
+
     if (parsedToolCalls.length > 0) {
+      yield { type: 'activity', message: `🔧 Executing ${parsedToolCalls.length} tool(s)...`, iteration: iterationCount };
+
       for (const tc of parsedToolCalls) {
         if (signal?.aborted) break;
-        yield { type: 'tool_call', id: tc.id, tool: tc.tool, params: tc.params };
+        const tcId = tc.id || uuidv4();
+
+        // Emit activity log for this tool call
+        const toolDesc = tc.tool === 'run_terminal_command'
+          ? `💻 Running: ${tc.params?.command?.slice(0, 80)}${tc.params?.command?.length > 80 ? '...' : ''}`
+          : `📄 ${tc.tool.replace(/_/g, ' ')}${tc.params?.path ? ': ' + tc.params.path : ''}`;
+        yield { type: 'activity', message: toolDesc, iteration: iterationCount };
+
         const result = await executeToolCall(tc, null, permissionMode, conversationId);
-        toolCallResults.push({ id: tc.id, tool: tc.tool, params: tc.params, result });
+        toolCallResults.push({ id: tcId, tool: tc.tool, params: tc.params, result });
+
         if (!result.pending) {
-          yield { type: 'tool_result', id: tc.id, result };
+          yield { type: 'tool_call', id: tcId, tool: tc.tool, params: tc.params, result };
+          yield { type: 'tool_result', id: tcId, result };
+          yield { type: 'activity', message: `✅ ${tc.tool.replace(/_/g, ' ')} completed`, iteration: iterationCount };
         } else {
+          yield { type: 'tool_call', id: tcId, tool: tc.tool, params: tc.params };
           yield { type: 'approval_required', commandId: result.commandId, tool: tc.tool, params: tc.params };
+          yield { type: 'activity', message: `⏸ Waiting for approval: ${tc.tool.replace(/_/g, ' ')}`, iteration: iterationCount };
           yield { type: 'agent_paused', message: 'Waiting for user approval...' };
           finalResponseText += responseText;
           yield { type: 'done', content: responseText || finalResponseText, toolCalls: [...allToolCallResults, ...toolCallResults], paused: true };
@@ -369,7 +362,7 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
 
       // Remove pending results
       const completedResults = toolCallResults.filter(r => !r.result.pending);
-      
+
       if (completedResults.length > 0 && !signal?.aborted) {
         const toolResultContext = completedResults
           .map(r => `Tool: ${r.tool}\nParams: ${JSON.stringify(r.params)}\nResult: ${JSON.stringify(r.result)}`)
@@ -381,9 +374,9 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
           { role: 'assistant', content: responseText },
           { role: 'tool', content: toolResultContext }
         ];
-        
+
         allToolCallResults.push(...toolCallResults);
-        yield { type: 'status', message: `Executed ${completedResults.length} tool(s), continuing analysis...` };
+        yield { type: 'activity', message: `🔄 Tools executed. Continuing analysis (iteration ${iterationCount})...`, iteration: iterationCount };
         continue; // Continue the agent loop
       }
     }
@@ -391,12 +384,14 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
     // No more tool calls — done
     allToolCallResults.push(...toolCallResults);
     finalResponseText += responseText;
+    yield { type: 'activity', message: `✨ Task complete after ${iterationCount} iteration(s).`, iteration: iterationCount };
     yield { type: 'done', content: responseText || finalResponseText, toolCalls: allToolCallResults, iterations: iterationCount };
     return;
   }
 
   // Max iterations hit
   if (!signal?.aborted) {
+    yield { type: 'activity', message: `⚠️ Max iterations (${MAX_AGENT_LOOP_ITERATIONS}) reached.`, iteration: iterationCount };
     yield { type: 'done', content: finalResponseText, toolCalls: allToolCallResults, iterations: iterationCount, maxReached: true };
   }
 }

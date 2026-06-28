@@ -499,6 +499,54 @@ router.get('/download', async (req, res) => {
 
 export default router;
 
+// ─── POST /api/files/rename ────────────────────────────────────────────────────
+router.post('/rename', async (req, res) => {
+  try {
+    const { oldPath, newPath } = req.body;
+    if (!oldPath || !newPath) {
+      return res.status(400).json({ error: 'oldPath and newPath are required' });
+    }
+
+    const path = await import('path');
+    const { promises: fsPromises } = await import('fs');
+
+    const absOld = path.resolve(oldPath);
+    const absNew = path.resolve(newPath);
+
+    // Check source exists
+    try {
+      await fsPromises.access(absOld);
+    } catch {
+      return res.status(404).json({ error: 'Source path does not exist' });
+    }
+
+    // Check destination doesn't already exist
+    try {
+      await fsPromises.access(absNew);
+      return res.status(409).json({ error: 'Destination path already exists' });
+    } catch {
+      // Good, doesn't exist
+    }
+
+    // Ensure parent directory of destination exists
+    const parentDir = path.dirname(absNew);
+    try {
+      await fsPromises.access(parentDir);
+    } catch {
+      await fsPromises.mkdir(parentDir, { recursive: true });
+    }
+
+    // Perform rename/move
+    await fsPromises.rename(absOld, absNew);
+
+    console.log(`[Rename] ${absOld} → ${absNew}`);
+    res.json({ success: true, oldPath: absOld, newPath: absNew });
+  } catch (err) {
+    console.error('[Rename] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/files/browse-dirs?path=X ─────────────────────────────────────────
 // Returns list of directories AND files for in-app folder browser (Cloud Run / Linux)
 router.get('/browse-dirs', async (req, res) => {

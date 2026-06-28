@@ -126,14 +126,66 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) 
 
 function TreeNode({ node, depth = 0 }) {
   const [expanded, setExpanded] = useState(depth === 0)
-  const [creating, setCreating] = useState(null) // 'file' or 'folder' or null
-  const { openFile, activeFilePath, deleteFile, createFile, createDirectory } = useFileStore()
+  const [creating, setCreating] = useState(null)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState(null)
+  const { openFile, activeFilePath, deleteFile, createFile, createDirectory, rename } = useFileStore()
   const language = useSettingsStore(state => state.language)
+  const t = useTranslation(language)
+  const renameInputRef = useRef(null)
 
   const isDir = node.isDir || node.type === 'directory'
   const isActive = !isDir && activeFilePath === node.path
 
+  // F2 keyboard shortcut for rename
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F2' && isActive && !renaming) {
+        e.preventDefault()
+        startRename()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isActive, renaming, node.path])
+
+  const startRename = () => {
+    setRenaming(true)
+    setRenameValue(node.name)
+    setRenameError(null)
+    setTimeout(() => renameInputRef.current?.focus(), 0)
+  }
+
+  const handleRenameSubmit = async () => {
+    const trimmed = renameValue.trim()
+    if (!trimmed || trimmed === node.name) {
+      setRenaming(false)
+      return
+    }
+    if (!isDir) {
+      const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
+      if (!hasExtension) {
+        setRenameError(language === 'vi'
+          ? 'Yêu cầu nhập phần mở rộng (ví dụ: .txt, .py)'
+          : 'Extension required (e.g. .txt, .py)')
+        return
+      }
+    }
+    const parentDir = node.path.substring(0, node.path.lastIndexOf('/')) || node.path.substring(0, node.path.lastIndexOf('\\'))
+    const newPath = `${parentDir}/${trimmed}`
+    try {
+      await rename(node.path, newPath)
+      setRenaming(false)
+    } catch (err) {
+      setRenameError(err.message || 'Rename failed')
+    }
+  }
+
+  const handleRenameCancel = () => setRenaming(false)
+
   const handleClick = () => {
+    if (renaming) return
     if (isDir) {
       setExpanded(v => !v)
     } else {
@@ -146,6 +198,11 @@ function TreeNode({ node, depth = 0 }) {
     if (confirm(`Delete "${node.name}"?`)) {
       deleteFile(node.path)
     }
+  }
+
+  const handleRename = (e) => {
+    e.stopPropagation()
+    startRename()
   }
 
   const handleCreateFile = (e) => {
@@ -184,7 +241,36 @@ function TreeNode({ node, depth = 0 }) {
           ) : null}
         </span>
         <span className="tree-icon">{isDir ? (expanded ? '📂' : '📁') : getFileIcon(node.name)}</span>
-        <span className="tree-name">{node.name}</span>
+        {renaming ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1 }}>
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="settings-input"
+              value={renameValue}
+              onChange={e => { setRenameValue(e.target.value); setRenameError(null) }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRenameSubmit()
+                if (e.key === 'Escape') handleRenameCancel()
+              }}
+              onBlur={() => { setTimeout(() => { if (renaming) handleRenameCancel() }, 150) }}
+              style={{ flex: 1, fontSize: '11px', padding: '1px 4px', height: '20px', minWidth: 0 }}
+              autoFocus
+            />
+            <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); handleRenameSubmit() }}>
+              <Check size={11} style={{ color: 'var(--success)' }} />
+            </button>
+            <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); handleRenameCancel() }}>
+              <X size={11} />
+            </button>
+          </span>
+        ) : (
+          <span className="tree-name">{node.name}</span>
+        )}
+        {renameError && renaming && (
+          <span style={{ color: 'var(--error)', fontSize: '9px', marginLeft: '4px', whiteSpace: 'nowrap' }}>{renameError}</span>
+        )}
+        {!renaming && (
         <div className="tree-actions">
           {isDir && (
             <>
@@ -196,10 +282,14 @@ function TreeNode({ node, depth = 0 }) {
               </button>
             </>
           )}
+          <button className="tree-action-btn" onClick={handleRename} title="Rename (F2)">
+            <span style={{ fontSize: '10px', fontWeight: 700 }}>✎</span>
+          </button>
           <button className="tree-action-btn danger" onClick={handleDelete} title="Delete">
             <Trash2 size={12} />
           </button>
         </div>
+        )}
       </div>
       {isDir && expanded && (
         <div className="tree-children">

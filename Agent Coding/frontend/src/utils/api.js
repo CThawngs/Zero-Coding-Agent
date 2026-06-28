@@ -208,7 +208,7 @@ export function streamChat(
   onToolCall,
   onDone,
   onError,
-  signal // Optional AbortSignal
+  onActivity,
 ) {
   const url = `${BASE_URL}/stream`
   
@@ -250,7 +250,7 @@ export function streamChat(
     const decoder = new TextDecoder()
     let buffer = ''
 
-    return readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, fetchSignal)
+    return readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, onActivity, fetchSignal)
   })
   .catch(err => {
     if (err.name === 'AbortError') {
@@ -266,7 +266,7 @@ export function streamChat(
   return () => abortController.abort()
 }
 
-async function readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, signal) {
+async function readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk, onToolCall, onDone, onError, onActivity, signal) {
   try {
     while (true) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -294,6 +294,12 @@ async function readLoop(reader, decoder, buffer, fullContent, toolCalls, onChunk
               if (parsed.content) {
                 fullContent += parsed.content
                 onChunk(parsed.content)
+              }
+              break
+
+            case 'activity':
+              if (onActivity && parsed.message) {
+                onActivity(parsed.message, parsed.iteration || 0)
               }
               break
 
