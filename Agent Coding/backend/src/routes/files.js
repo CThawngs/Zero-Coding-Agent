@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import {
   readFile,
@@ -21,6 +21,11 @@ router.get('/tree', async (req, res) => {
   const { path: dirPath = process.cwd(), depth } = req.query;
 
   try {
+    // Auto-create workspace directory if it doesn't exist
+    const resolved = resolve(dirPath);
+    if (!existsSync(resolved)) {
+      mkdirSync(resolved, { recursive: true });
+    }
     const tree = await getFileTree(dirPath, 0, depth ? parseInt(depth) : 4);
     res.json(tree);
   } catch (err) {
@@ -99,6 +104,10 @@ router.get('/list', async (req, res) => {
   const { path: dirPath = process.cwd() } = req.query;
 
   try {
+    const resolved = resolve(dirPath);
+    if (!existsSync(resolved)) {
+      mkdirSync(resolved, { recursive: true });
+    }
     const result = await listDirectory(dirPath);
     res.json(result);
   } catch (err) {

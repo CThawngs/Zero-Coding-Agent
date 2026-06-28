@@ -458,11 +458,11 @@ const useProviderStore = create(
         showFreeOnly: state.showFreeOnly,
         modelErrors: {},
       }),
-      // Custom serialize/deserialize — use base64+JSON for reliability
+      // Custom serialize/deserialize — use JSON for reliability
       // (async Web Crypto encryption is split into export/import only)
       serialize: (state) => {
         try {
-          return JSON.stringify(state)
+          return JSON.stringify({ ...state, _v: 2 }) // version 2 = plaintext
         } catch (e) {
           console.warn('Serialize failed:', e)
           return '{}'
@@ -471,6 +471,12 @@ const useProviderStore = create(
       deserialize: (str) => {
         try {
           const parsed = JSON.parse(str)
+          // Version check: if old encrypted format (no _v or _v < 2), reset
+          if (!parsed._v || parsed._v < 2) {
+            console.log('[providerStore] Clearing old format localStorage')
+            return undefined
+          }
+          delete parsed._v
           // Migrate: ensure all provider entries have customModels/deletedModels arrays
           if (parsed.providers) {
             Object.keys(parsed.providers).forEach(pid => {
@@ -481,7 +487,7 @@ const useProviderStore = create(
           }
           return parsed
         } catch (e) {
-          console.warn('Deserialize failed:', e)
+          console.warn('Deserialize failed, resetting:', e.message)
           return undefined
         }
       },
