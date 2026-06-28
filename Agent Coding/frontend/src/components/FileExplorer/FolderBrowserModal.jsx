@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { X, Folder, FolderOpen, ChevronRight, ArrowUp, Home, File, Image,
-  FileText, FileCode, Settings, Download } from 'lucide-react'
+  FileText, FileCode, Settings, Check } from 'lucide-react'
 import { api } from '../../utils/api'
 import { useTranslation } from '../../utils/translations'
 
@@ -25,21 +25,22 @@ function formatSize(bytes) {
 export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentWorkspace }) {
   const t = useTranslation()
   const [currentPath, setCurrentPath] = useState('')
-  const [items, setItems] = useState([]) // {name, path, isDir, size}
+  const [items, setItems] = useState([])
   const [parent, setParent] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [selectedDir, setSelectedDir] = useState(null)
 
   const loadPath = useCallback(async (dirPath) => {
     setLoading(true)
     setError(null)
+    setSelectedDir(null)
     try {
-      const res = await api.browseEntries(dirPath)
+      const res = await api.browseDirs(dirPath)
       if (res && res.error === 'cannot_read') {
         setError(t?.('cannotReadFolder') || 'Cannot read this folder')
         setItems([])
       } else if (res) {
-        // Sort: directories first, then files, both alphabetically
         const sorted = [...(res.entries || [])].sort((a, b) => {
           if (a.isDir && !b.isDir) return -1
           if (!a.isDir && b.isDir) return 1
@@ -66,16 +67,16 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
     }
   }, [isOpen, loadPath, currentWorkspace])
 
-  const handleClick = (item) => {
-    if (item.isDir) {
-      // Navigate into folder
-      loadPath(item.path)
-      setCurrentPath(item.path)
-    } else {
-      // File: open/load file
-      // Could preview here, for now just navigate to file's parent and load file tree
-      loadPath(item.path)
-    }
+  // Handle folder click = attach & close immediately
+  const handleFolderClick = (item) => {
+    // Attach this folder as workspace and close modal
+    onSelect(item.path)
+    onClose()
+  }
+
+  // Handle folder to preview (just highlight/select it, user can then click Attach)
+  const handleFolderPreview = (item) => {
+    setSelectedDir(item)
   }
 
   const handleParent = () => {
@@ -89,25 +90,17 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
     loadPath('')
   }
 
-  const handleOpen = () => {
-    if (currentPath && !items.some(i => i.isDir && i.path === currentPath)) {
-      // Current path is a file or empty dir → use its parent
-      const dirPath = parent || currentPath
-      onSelect(dirPath)
-    } else {
-      onSelect(currentPath)
+  const handleAttach = () => {
+    // Attach highlighted folder as workspace
+    const target = selectedDir || items.find(i => i.isDir && currentWorkspace && i.path === currentWorkspace)
+    if (target) {
+      onSelect(target.path)
+      onClose()
     }
-    onClose()
-  }
-
-  const handleOpenAsWorkspace = () => {
-    onSelect(currentPath)
-    onClose()
   }
 
   if (!isOpen) return null
 
-  // Separate dirs and files
   const dirs = items.filter(i => i.isDir)
   const files = items.filter(i => !i.isDir)
 
@@ -119,7 +112,7 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
       }} />
       <div className="folder-browser-modal" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: '600px', maxHeight: '480px', background: 'var(--bg-primary)',
+        width: '600px', maxHeight: '500px', background: 'var(--bg-primary)',
         border: '1px solid var(--border)', borderRadius: '10px',
         boxShadow: '0 12px 48px rgba(0,0,0,0.4)', zIndex: 10000,
         display: 'flex', flexDirection: 'column', overflow: 'hidden'
@@ -151,7 +144,7 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
           <button className="icon-btn icon-btn-sm" onClick={handleRoot} title="Home / Root">
             <Home size={12} />
           </button>
-          <button className="icon-btn icon-btn-sm" onClick={handleParent} disabled={!parent}>
+          <button className="icon-btn icon-btn-sm" onClick={handleParent} disabled={!parent} title="Go to parent">
             <ArrowUp size={12} />
           </button>
           <span style={{
@@ -191,27 +184,38 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
           {!loading && !error && (
             <>
               {/* Folders */}
-              {dirs.map(item => (
-                <div
-                  key={item.path + '-dir'}
-                  className="browser-entry"
-                  onClick={() => handleClick(item)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '5px 20px', cursor: 'pointer',
-                    fontSize: '12px', color: 'var(--text-primary)',
-                    transition: 'background 0.1s'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <Folder size={13} style={{ color: '#ffd54f', flexShrink: 0 }} />
-                  <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.name}
-                  </span>
-                  <ChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                </div>
-              ))}
+              {dirs.map(item => {
+                const isAttached = currentWorkspace && item.path === currentWorkspace
+                const isSelected = selectedDir && selectedDir.path === item.path
+                return (
+                  <div
+                    key={item.path + '-dir'}
+                    className="browser-entry"
+                    onClick={() => handleFolderPreview(item)}
+                    onDoubleClick={() => handleFolderClick(item)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '5px 20px', cursor: 'pointer',
+                      fontSize: '12px', color: 'var(--text-primary)',
+                      transition: 'background 0.1s',
+                      background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                      borderLeft: isAttached ? '2px solid var(--accent)' : isSelected ? '2px solid var(--border)' : '2px solid transparent'
+                    }}
+                  >
+                    {isAttached ? (
+                      <Check size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                    ) : (
+                      <Folder size={13} style={{ color: '#ffd54f', flexShrink: 0 }} />
+                    )}
+                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: isAttached ? 600 : 400 }}>
+                      {item.name}
+                    </span>
+                    {!isAttached && (
+                      <ChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    )}
+                  </div>
+                )
+              })}
 
               {/* Separator */}
               {dirs.length > 0 && files.length > 0 && (
@@ -226,15 +230,12 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
                 <div
                   key={item.path + '-file'}
                   className="browser-entry"
-                  onClick={() => handleClick(item)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '5px 20px', cursor: 'pointer',
+                    padding: '5px 20px', cursor: 'default',
                     fontSize: '12px', color: 'var(--text-secondary)',
                     transition: 'background 0.1s'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   {getIconForFile(item.name)}
                   <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -261,13 +262,13 @@ export default function FolderBrowserModal({ isOpen, onClose, onSelect, currentW
             fontSize: '11px', color: 'var(--text-muted)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '350px'
           }}>
-            {currentPath || t?.('rootPath') || 'Root'}
+            {selectedDir ? selectedDir.name : (currentPath ? currentPath.split('/').pop() : (t?.('rootPath') || 'Root'))}
           </span>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-ghost btn-sm" onClick={onClose}>
               {t?.('cancel') || 'Cancel'}
             </button>
-            <button className="btn btn-primary btn-sm" onClick={handleOpenAsWorkspace} disabled={!currentPath}>
+            <button className="btn btn-primary btn-sm" onClick={handleAttach} disabled={!selectedDir && !currentPath}>
               <FolderOpen size={13} style={{ marginRight: '4px', display: 'inline', verticalAlign: 'text-bottom' }} />
               {t?.('open') || 'Open'}
             </button>
