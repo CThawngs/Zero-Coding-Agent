@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { FolderOpen, ChevronRight, ChevronDown, File, Folder, FolderOpen as FolderOpenIcon,
-  RefreshCw, FilePlus, FolderPlus, Trash2, Edit3, Download } from 'lucide-react'
+  RefreshCw, FilePlus, FolderPlus, Trash2, Edit3, Download, X, Check } from 'lucide-react'
 import useFileStore from '../../stores/fileStore'
 import useSettingsStore from '../../stores/settingsStore'
 import { useTranslation } from '../../utils/translations'
@@ -14,30 +14,75 @@ export default function FileExplorer() {
   const { workspace, setWorkspace, fileTree, refreshTree, openFiles, activeFilePath } = useFileStore()
   const language = useSettingsStore(state => state.language)
   const t = useTranslation(language)
+  const [showPathInput, setShowPathInput] = useState(false)
+  const [pathInput, setPathInput] = useState('')
+  const pathInputRef = useRef(null)
+
+  useEffect(() => {
+    if (showPathInput && pathInputRef.current) {
+      pathInputRef.current.focus()
+    }
+  }, [showPathInput])
 
   const handleOpenFolder = async () => {
     const connMode = api.getConnectionMode()
     if (connMode === 'cloud') {
-      const folderName = prompt(
-        language === 'vi' 
-          ? 'Nhập tên thư mục dự án Sandbox trên Cloud (ví dụ: project-2):' 
-          : 'Enter Cloud Sandbox project directory name (e.g., project-2):',
-        'project-1'
-      )
-      if (folderName && folderName.trim()) {
-        setWorkspace(`./workspace/${folderName.trim()}`)
-      }
+      setShowPathInput(true)
+      setPathInput('project-1')
       return
     }
 
+    // Try browser-native directory picker first
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
+        window.__workspaceHandle = handle
+        // Try resolve full path via backend
+        try {
+          const dirPath = await api.resolveFolder(handle.name)
+          if (dirPath && dirPath.path) {
+            setWorkspace(dirPath.path)
+            return
+          }
+        } catch { /* fallback */ }
+        setWorkspace(`./workspace/${handle.name}`)
+        return
+      } catch (err) {
+        if (err.name === 'AbortError') return
+        // Picker failed (e.g. insecure context) — fall through to input
+      }
+    }
+
+    // Fallback: try server-side picker
     try {
       const res = await api.selectDirectory()
       if (res && res.success && res.path) {
         setWorkspace(res.path)
+        return
       }
-    } catch (err) {
-      console.error("Failed to select workspace folder:", err)
+    } catch { /* server picker not available */ }
+
+    // Final fallback: show inline path input
+    setShowPathInput(true)
+    setPathInput(workspace || '')
+  }
+
+  const handlePathSubmit = () => {
+    const trimmed = pathInput.trim()
+    if (!trimmed) return
+    const connMode = api.getConnectionMode()
+    if (connMode === 'cloud') {
+      setWorkspace(`./workspace/${trimmed}`)
+    } else {
+      // Treat as absolute or relative path
+      setWorkspace(trimmed)
     }
+    setShowPathInput(false)
+  }
+
+  const handlePathKeyDown = (e) => {
+    if (e.key === 'Enter') handlePathSubmit()
+    if (e.key === 'Escape') setShowPathInput(false)
   }
 
   return (
@@ -71,9 +116,35 @@ export default function FileExplorer() {
         </div>
       </div>
 
+      {/* Inline path input (VSCode-style) */}
+      {showPathInput && (
+        <div className="explorer-path-input" style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '4px 8px', borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)'
+        }}>
+          <input
+            ref={pathInputRef}
+            type="text"
+            className="settings-input"
+            value={pathInput}
+            onChange={e => setPathInput(e.target.value)}
+            onKeyDown={handlePathKeyDown}
+            placeholder={api.getConnectionMode() === 'cloud' ? 'e.g. project-1' : 'e.g. C:\\Users\\nguye\\Projects\\my-app'}
+            style={{ flex: 1, fontSize: '12px', padding: '4px 8px' }}
+          />
+          <button className="icon-btn icon-btn-sm" onClick={handlePathSubmit} title="Open">
+            <Check size={13} style={{ color: 'var(--success)' }} />
+          </button>
+          <button className="icon-btn icon-btn-sm" onClick={() => setShowPathInput(false)} title="Cancel">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {/* Workspace path */}
-      {workspace && (
-        <div className="workspace-path">
+      {workspace && !showPathInput && (
+        <div className="workspace-path" style={{ cursor: 'pointer' }} onClick={() => { setShowPathInput(true); setPathInput(workspace) }}>
           <span title={workspace}>{workspace}</span>
         </div>
       )}
@@ -84,9 +155,9 @@ export default function FileExplorer() {
           {!workspace ? (
             <div className="explorer-empty">
               <FolderOpen size={32} />
-              <p>{t('emptyWorkspace') || 'Chưa mở folder nào'}</p>
+              <p>{t('emptyWorkspace') || 'No folder opened'}</p>
               <button className="btn-primary btn-sm" onClick={handleOpenFolder}>
-                {t('openFolderBtn') || 'Mở Folder'}
+                {t('openFolderBtn') || 'Open Folder'}
               </button>
             </div>
           ) : (

@@ -1,8 +1,80 @@
-import React, { useState, useCallback } from 'react'
-import { ChevronRight, ChevronDown, FilePlus, FolderPlus, Trash2, RotateCcw } from 'lucide-react'
+import React, { useState, useRef, useEffect } from 'react'
+import { ChevronRight, ChevronDown, FilePlus, FolderPlus, Trash2, RotateCcw, Check, X } from 'lucide-react'
 import useFileStore from '../../stores/fileStore'
+import useSettingsStore from '../../stores/settingsStore'
+import { useTranslation } from '../../utils/translations'
 import { getFileIcon } from '../../utils/fileUtils'
 import './FileTree.css'
+
+// Common file extensions for validation
+const FILE_EXTENSIONS = [
+  '.txt', '.md', '.json', '.js', '.jsx', '.ts', '.tsx', '.py', '.html', '.css',
+  '.scss', '.yaml', '.yml', '.xml', '.sh', '.bash', '.bat', '.ps1', '.sql',
+  '.java', '.c', '.cpp', '.h', '.hpp', '.rs', '.go', '.rb', '.php', '.swift',
+  '.kt', '.toml', '.ini', '.cfg', '.env', '.gitignore', '.dockerfile',
+  '.vue', '.svelte', '. astro', '.prisma', '.graphql', '.proto',
+]
+
+function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
+  const [name, setName] = useState('')
+  const inputRef = useRef(null)
+  const language = useSettingsStore(state => state.language)
+  const t = useTranslation(language)
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus()
+  }, [])
+
+  const handleSubmit = () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      onCancel()
+      return
+    }
+    if (type === 'file') {
+      // Validate: must have extension
+      const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || trimmed.includes('.')
+      if (!hasExtension) {
+        // Auto-append .txt if no extension
+        onConfirm(`${basePath}/${trimmed}.txt`)
+      } else {
+        onConfirm(`${basePath}/${trimmed}`)
+      }
+    } else {
+      onConfirm(`${basePath}/${trimmed}`)
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSubmit()
+    if (e.key === 'Escape') onCancel()
+  }
+
+  return (
+    <div className="tree-item" style={{ paddingLeft: '28px', gap: '2px', display: 'flex', alignItems: 'center' }}>
+      <span className="tree-icon" style={{ fontSize: '12px' }}>
+        {type === 'file' ? '📄' : '📁'}
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        className="settings-input"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => { if (!name.trim()) onCancel() }}
+        placeholder={type === 'file' ? 'filename.ext' : 'folder-name'}
+        style={{ flex: 1, fontSize: '11px', padding: '1px 4px', height: '20px', minWidth: 0 }}
+      />
+      <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); handleSubmit() }}>
+        <Check size={11} style={{ color: 'var(--success)' }} />
+      </button>
+      <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); onCancel() }}>
+        <X size={11} />
+      </button>
+    </div>
+  )
+}
 
 function TreeNode({ node, depth = 0 }) {
   const [expanded, setExpanded] = useState(depth === 0)
@@ -64,20 +136,23 @@ function TreeNode({ node, depth = 0 }) {
 
 export default function FileTree() {
   const { fileTree, isLoading, workspace, refreshTree, createFile, createDirectory } = useFileStore()
+  const language = useSettingsStore(state => state.language)
+  const t = useTranslation(language)
+  const [creating, setCreating] = useState(null) // 'file' or 'folder' or null
 
-  const handleCreateFile = async () => {
-    const name = prompt('File name:')
-    if (name && workspace) {
-      await createFile(`${workspace}/${name}`)
+  const handleCreateFile = () => setCreating('file')
+  const handleCreateDir = () => setCreating('folder')
+
+  const handleCreateConfirm = async (fullPath) => {
+    if (creating === 'file') {
+      await createFile(fullPath)
+    } else {
+      await createDirectory(fullPath)
     }
+    setCreating(null)
   }
 
-  const handleCreateDir = async () => {
-    const name = prompt('Folder name:')
-    if (name && workspace) {
-      await createDirectory(`${workspace}/${name}`)
-    }
-  }
+  const handleCreateCancel = () => setCreating(null)
 
   if (isLoading) {
     return (
@@ -110,6 +185,15 @@ export default function FileTree() {
           <RotateCcw size={13} />
         </button>
       </div>
+      {/* Inline new file/folder input */}
+      {creating && (
+        <InlineNewFileInput
+          type={creating}
+          basePath={workspace}
+          onConfirm={handleCreateConfirm}
+          onCancel={handleCreateCancel}
+        />
+      )}
       {/* Tree */}
       {fileTree.children ? (
         fileTree.children.map((node, i) => (

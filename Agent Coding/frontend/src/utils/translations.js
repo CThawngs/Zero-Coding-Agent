@@ -104,6 +104,8 @@ export const translations = {
     openFolderBtn: 'Mở Folder',
     workspacePathTitle: 'Workspace hiện tại:',
     refreshBtn: 'Làm mới',
+    addModelPlaceholder: 'Nhập tên model (VD: gpt-4o)',
+    searchModel: 'Tìm model...',
   },
   en: {
     // General
@@ -210,6 +212,8 @@ export const translations = {
     openFolderBtn: 'Open Folder',
     workspacePathTitle: 'Current Workspace:',
     refreshBtn: 'Refresh',
+    addModelPlaceholder: 'Type model name (e.g. gpt-4o)',
+    searchModel: 'Search model...',
   }
 }
 

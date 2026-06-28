@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Plus, Check, X } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
 import { useTranslation } from '../utils/translations'
 import './ModelSelector.css'
@@ -15,14 +15,19 @@ const PROVIDER_ICONS = {
   '9router': '/nine-router.png',
 }
 
+// Providers with dynamic/empty models where user must type model name
+const DYNAMIC_MODEL_PROVIDERS = ['openrouter', '9router', 'custom', 'ollama', 'lmstudio']
+
 export default function ModelSelector() {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [newModelInputs, setNewModelInputs] = useState({}) // { providerId: 'model-name' }
   const ref = useRef(null)
   const t = useTranslation()
   const {
     activeProvider, activeModel, providers,
     selectProvider, selectModel, getModelsForProvider,
+    addCustomModel,
     showFreeOnly, toggleFreeFilter, isModelFree
   } = useProviderStore()
 
@@ -56,14 +61,24 @@ export default function ModelSelector() {
       const matchFree = !showFreeOnly || isModelFree(m)
       return matchSearch && matchFree
     })
-    return { pid, pdef, models: filtered }
-  }).filter(p => p.models.length > 0 || !search)
+    return { pid, pdef, models: filtered, totalModels: models.length }
+  }).filter(p => p.models.length > 0 || !search || DYNAMIC_MODEL_PROVIDERS.includes(p.pid))
 
   const isProviderConnected = (pid) => {
     const p = providers[pid]
     if (!p) return false
     if (pid === 'ollama' || pid === 'lmstudio') return p.connected
     return p.connected || (p.apiKey && p.apiKey.length > 5)
+  }
+
+  const handleAddModelInline = (pid) => {
+    const modelName = (newModelInputs[pid] || '').trim()
+    if (!modelName) return
+    addCustomModel(pid, modelName)
+    selectProvider(pid)
+    selectModel(modelName)
+    setNewModelInputs(prev => ({ ...prev, [pid]: '' }))
+    setOpen(false)
   }
 
   return (
@@ -79,22 +94,25 @@ export default function ModelSelector() {
             <input
               autoFocus
               className="model-search"
-              placeholder="Tìm model..."
+              placeholder={t('searchModel') || 'Search model...'}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
             <button
               className={`free-toggle ${showFreeOnly ? 'active' : ''}`}
               onClick={toggleFreeFilter}
-              title="Chỉ hiện model miễn phí"
+              title="Show free models only"
             >
               Free
             </button>
           </div>
 
           <div className="model-list">
-            {filteredProviders.map(({ pid, pdef, models }) => {
+            {filteredProviders.map(({ pid, pdef, models, totalModels }) => {
               const connected = isProviderConnected(pid)
+              const isDynamic = DYNAMIC_MODEL_PROVIDERS.includes(pid)
+              const showAddModel = connected && (isDynamic || models.length === 0)
+
               return (
                 <div key={pid} className="provider-group">
                   <div className="provider-group-header">
@@ -106,6 +124,8 @@ export default function ModelSelector() {
                     </span>
                     {!connected && <span className="not-connected">Not configured</span>}
                   </div>
+
+                  {/* Existing model buttons */}
                   {models.map(m => (
                     <button
                       key={m.id}
@@ -131,12 +151,48 @@ export default function ModelSelector() {
                       )}
                     </button>
                   ))}
-                  {models.length === 0 && (
-                    <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
-                      <div>{t('noModelsInSettings')}</div>
-                      {pid !== 'openrouter' && pid !== 'ollama' && pid !== 'lmstudio' && (
-                        <div style={{marginTop: 2}}>{t('noApiKeyConfigured')}</div>
+
+                  {/* Inline "Add model" input for dynamic providers */}
+                  {showAddModel && (
+                    <div className="add-model-inline" style={{
+                      display: 'flex', gap: '4px', padding: '4px 12px',
+                      alignItems: 'center'
+                    }}>
+                      <Plus size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        className="settings-input"
+                        placeholder={t('addModelPlaceholder') || 'Type model name (e.g. gpt-4o)'}
+                        value={newModelInputs[pid] || ''}
+                        onChange={e => setNewModelInputs(prev => ({ ...prev, [pid]: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleAddModelInline(pid)
+                          if (e.key === 'Escape') setNewModelInputs(prev => ({ ...prev, [pid]: '' }))
+                        }}
+                        style={{ flex: 1, fontSize: '11px', padding: '2px 6px', height: '22px', minWidth: 0 }}
+                      />
+                      {(newModelInputs[pid] || '').trim() && (
+                        <button
+                          className="icon-btn icon-btn-sm"
+                          onMouseDown={e => { e.preventDefault(); handleAddModelInline(pid) }}
+                          style={{ flexShrink: 0 }}
+                          title="Add & select model"
+                        >
+                          <Check size={12} style={{ color: 'var(--success)' }} />
+                        </button>
                       )}
+                    </div>
+                  )}
+
+                  {/* No models message for non-dynamic providers */}
+                  {models.length === 0 && !showAddModel && !connected && (
+                    <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
+                      <div>{t('noApiKeyConfigured') || 'API key not configured'}</div>
+                    </div>
+                  )}
+                  {models.length === 0 && !showAddModel && connected && (
+                    <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
+                      <div>{t('noModelsInSettings') || 'Add model in Settings'}</div>
                     </div>
                   )}
                 </div>
