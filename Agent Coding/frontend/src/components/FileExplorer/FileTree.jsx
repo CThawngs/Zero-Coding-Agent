@@ -75,8 +75,17 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) 
             const trimmed = name.trim()
             if (!trimmed) {
               onCancel()
+              return
+            }
+            if (type === 'file') {
+              const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
+              if (hasExtension) {
+                onConfirm(`${basePath}/${trimmed}`)
+              } else {
+                onCancel()
+              }
             } else {
-              handleSubmit()
+              onConfirm(`${basePath}/${trimmed}`)
             }
           }, 150)
         }}
