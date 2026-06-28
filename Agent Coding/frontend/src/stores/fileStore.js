@@ -16,6 +16,10 @@ const useFileStore = create(
       isLoading: false,
       error: null,
       _ws: null,
+      isFolderPickerOpen: false,
+
+      openFolderPicker: () => set({ isFolderPickerOpen: true }),
+      closeFolderPicker: () => set({ isFolderPickerOpen: false }),
 
       // Set workspace
       setWorkspace: async (path) => {

@@ -7,6 +7,7 @@ import useChatStore from './stores/chatStore'
 import useSettingsStore from './stores/settingsStore'
 
 import useFileStore from './stores/fileStore'
+import FolderPickerModal from './components/UI/FolderPickerModal'
 
 export default function App() {
   const [showSetup, setShowSetup] = useState(false)
@@ -76,6 +77,7 @@ export default function App() {
             {showSetup && (
               <SetupModal onComplete={handleSetupComplete} />
             )}
+            <FolderPickerModal />
           </>
         } />
       </Routes>

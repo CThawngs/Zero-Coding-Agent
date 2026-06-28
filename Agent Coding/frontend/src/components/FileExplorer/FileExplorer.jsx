@@ -24,22 +24,14 @@ export default function FileExplorer() {
     }
   }, [showPathInput])
 
-  const handleOpenFolder = async () => {
+  const handleOpenFolder = () => {
     const connMode = api.getConnectionMode()
     if (connMode === 'cloud') {
       setShowPathInput(true)
       setPathInput('project-1')
       return
     }
-
-    try {
-      const res = await api.selectDirectory()
-      if (res && res.success && res.path) {
-        setWorkspace(res.path)
-      }
-    } catch (err) {
-      console.error('Failed to select directory:', err)
-    }
+    useFileStore.getState().openFolderPicker()
   }
 
   const handlePathSubmit = () => {
