@@ -17,8 +17,8 @@ const FILE_EXTENSIONS = [
 
 function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) {
   const [name, setName] = useState('')
+  const [error, setError] = useState(null)
   const inputRef = useRef(null)
-  const isSubmitting = useRef(false)
   const language = useSettingsStore(state => state.language)
   const t = useTranslation(language)
 
@@ -27,7 +27,6 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) 
   }, [])
 
   const handleSubmit = () => {
-    if (isSubmitting.current) return
     const trimmed = name.trim()
     if (!trimmed) {
       onCancel()
@@ -37,13 +36,11 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) 
       // Validate: must have extension
       const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
       if (!hasExtension) {
-        isSubmitting.current = true
-        alert(language === 'vi'
-          ? 'Vui lòng nhập phần mở rộng của tệp (ví dụ: .txt, .md, .json, .py, .html, .css)'
-          : 'Please specify a valid file extension (e.g., .txt, .md, .json, .py, .html, .css)'
+        setError(language === 'vi'
+          ? 'Yêu cầu nhập phần mở rộng (ví dụ: .txt, .py)'
+          : 'Extension required (e.g. .txt, .py)'
         )
-        isSubmitting.current = false
-        setTimeout(() => { if (inputRef.current) inputRef.current.focus() }, 50)
+        if (inputRef.current) inputRef.current.focus()
         return
       }
       onConfirm(`${basePath}/${trimmed}`)
@@ -58,46 +55,71 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) 
   }
 
   return (
-    <div className="tree-item" style={{ paddingLeft: `${12 + depth * 16}px`, gap: '2px', display: 'flex', alignItems: 'center' }}>
-      <span className="tree-icon" style={{ fontSize: '12px' }}>
-        {type === 'file' ? '📄' : '📁'}
-      </span>
-      <input
-        ref={inputRef}
-        type="text"
-        className="settings-input"
-        value={name}
-        onChange={e => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => {
-          setTimeout(() => {
-            if (isSubmitting.current) return
-            const trimmed = name.trim()
-            if (!trimmed) {
-              onCancel()
-              return
-            }
-            if (type === 'file') {
-              const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
-              if (hasExtension) {
-                onConfirm(`${basePath}/${trimmed}`)
-              } else {
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: `${12 + depth * 16}px` }}>
+      <div className="tree-item" style={{ paddingLeft: 0, gap: '2px', display: 'flex', alignItems: 'center', margin: 0, overflow: 'visible', width: '90%' }}>
+        <span className="tree-icon" style={{ fontSize: '12px' }}>
+          {type === 'file' ? '📄' : '📁'}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          className="settings-input"
+          value={name}
+          onChange={e => {
+            setName(e.target.value)
+            if (error) setError(null)
+          }}
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            setTimeout(() => {
+              const trimmed = name.trim()
+              if (!trimmed) {
                 onCancel()
+                return
               }
-            } else {
-              onConfirm(`${basePath}/${trimmed}`)
-            }
-          }, 150)
-        }}
-        placeholder={type === 'file' ? 'filename.ext' : 'folder-name'}
-        style={{ flex: 1, fontSize: '11px', padding: '1px 4px', height: '20px', minWidth: 0 }}
-      />
-      <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); handleSubmit() }}>
-        <Check size={11} style={{ color: 'var(--success)' }} />
-      </button>
-      <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); onCancel() }}>
-        <X size={11} />
-      </button>
+              if (type === 'file') {
+                const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
+                if (hasExtension) {
+                  onConfirm(`${basePath}/${trimmed}`)
+                } else {
+                  onCancel()
+                }
+              } else {
+                onConfirm(`${basePath}/${trimmed}`)
+              }
+            }, 150)
+          }}
+          placeholder={type === 'file' ? 'filename.ext' : 'folder-name'}
+          style={{ 
+            flex: 1, 
+            fontSize: '11px', 
+            padding: '1px 4px', 
+            height: '20px', 
+            minWidth: 0,
+            border: error ? '1px solid var(--error)' : '1px solid var(--border)'
+          }}
+        />
+        <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); handleSubmit() }}>
+          <Check size={11} style={{ color: 'var(--success)' }} />
+        </button>
+        <button className="icon-btn icon-btn-sm" onMouseDown={e => { e.preventDefault(); onCancel() }}>
+          <X size={11} />
+        </button>
+      </div>
+      {error && (
+        <div style={{ 
+          color: 'var(--error)', 
+          fontSize: '9px', 
+          paddingLeft: '18px', 
+          marginTop: '-2px', 
+          marginBottom: '2px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          {error}
+        </div>
+      )}
     </div>
   )
 }
