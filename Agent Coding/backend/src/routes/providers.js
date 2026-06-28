@@ -192,7 +192,7 @@ router.post('/:id/validate-model', async (req, res) => {
       return res.json({ valid: false, error: `Model "${modelId}" does not exist in ${provider.name}. Available: ${availableIds.join(', ')}`, available: availableIds });
     }
 
-    // Dynamic providers — try to discover models
+    // Dynamic providers — try to discover models from provider API
     const key = apiKey || process.env[provider.envKey];
     const baseURL = baseUrl || provider.baseUrl;
     const dynamic = await discoverModels(id, key, baseURL);
@@ -200,13 +200,13 @@ router.post('/:id/validate-model', async (req, res) => {
     if (found) {
       return res.json({ valid: true, model: found });
     }
-    // For dynamic providers, accept any model name (can't fully validate)
-    if (dynamic.length === 0 && key) {
-      // Has key but couldn't discover — accept optimistically
-      return res.json({ valid: true, model: { id: modelId, name: modelId }, note: 'Could not verify — accepted optimistically' });
+    // If we got a list of models but didn't find a match → reject
+    if (dynamic.length > 0) {
+      const availableIds = dynamic.map(m => m.id);
+      return res.json({ valid: false, error: `Model "${modelId}" not found in ${provider.name}. Available models: ${availableIds.slice(0, 10).join(', ')}${availableIds.length > 10 ? `... (${availableIds.length} total)` : ''}`, available: availableIds.slice(0, 20) });
     }
-    const availableIds = dynamic.map(m => m.id);
-    return res.json({ valid: false, error: `Model "${modelId}" not found in ${provider.name}.`, available: availableIds.slice(0, 20) });
+    // Could not discover models at all (no connection) — accept with warning
+    return res.json({ valid: true, model: { id: modelId, name: modelId }, note: 'Could not reach provider API — added without verification. If model is invalid, chat will show error.' });
   } catch (err) {
     res.status(500).json({ valid: false, error: err.message });
   }

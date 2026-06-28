@@ -501,8 +501,11 @@ router.post('/stream', async (req, res) => {
       sseSend(res, event);
 
       // Accumulate text content and tool calls for saving
-      if (event.type === 'chunk' && event.content) {
+      if (event.type === 'delta' && event.content) {
         fullResponse += event.content;
+      }
+      if (event.type === 'done' && event.content) {
+        fullResponse = event.content;
       }
       if (event.type === 'tool_call') {
         allToolCalls.push(event);
@@ -686,8 +689,8 @@ router.post('/conversations', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
+// ─── GET /conversations/:id ──────────────────────────────────────────────────
+// Returns a conversation with paginated messages (newest first)
 router.get('/conversations/:id', async (req, res) => {
   try {
     const { page: pageStr, limit: limitStr } = req.query;
@@ -697,12 +700,14 @@ router.get('/conversations/:id', async (req, res) => {
     const conv = await getConversation(req.params.id);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-    // Paginate messages (return most recent `limit` messages)
+    // Paginate messages — return most recent `limit` messages
     const allMessages = conv.messages || [];
     const total = allMessages.length;
-    const start = page * limit;
-    const paginatedMessages = allMessages.slice(start, start + limit);
-    const hasMore = start + limit < total;
+    // Show newest messages first: page 0 = last N messages
+    const end = total - (page * limit);
+    const start = Math.max(0, end - limit);
+    const paginatedMessages = allMessages.slice(start, end);
+    const hasMore = start > 0;
 
     res.json({
       ...conv,
@@ -717,7 +722,7 @@ router.get('/conversations/:id', async (req, res) => {
 });
 
 // ─── GET /conversations/:id/messages ──────────────────────────────────────────
-// Returns paginated messages for a conversation (older messages via lazy load)
+// Returns paginated messages (newest first, older via lazy load)
 router.get('/conversations/:id/messages', async (req, res) => {
   try {
     const { page: pageStr, limit: limitStr } = req.query;
@@ -729,9 +734,11 @@ router.get('/conversations/:id/messages', async (req, res) => {
 
     const allMessages = conv.messages || [];
     const total = allMessages.length;
-    const start = page * limit;
-    const paginatedMessages = allMessages.slice(start, start + limit);
-    const hasMore = start + limit < total;
+    // Newest first: page 0 = last N messages
+    const end = total - (page * limit);
+    const start = Math.max(0, end - limit);
+    const paginatedMessages = allMessages.slice(start, end);
+    const hasMore = start > 0;
 
     res.json({ messages: paginatedMessages, hasMore, page, total });
   } catch (err) {
