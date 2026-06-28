@@ -466,7 +466,9 @@ router.post('/stream', async (req, res) => {
     const providerApiKey = req.body.customApiKey;
     const providerBaseURL = req.body.customBaseURL;
 
-    // Run the continuous agent loop
+    // Run the continuous agent loop — accumulate response for saving
+    let fullResponse = '';
+    let allToolCalls = [];
     for await (const event of runAgentCycle({
       provider,
       model,
@@ -480,22 +482,34 @@ router.post('/stream', async (req, res) => {
     })) {
       if (clientDisconnected || signal.aborted) break;
       sseSend(res, event);
-      
+
+      // Accumulate text content and tool calls for saving
+      if (event.type === 'chunk' && event.content) {
+        fullResponse += event.content;
+      }
+      if (event.type === 'tool_call') {
+        allToolCalls.push(event);
+      }
+
       // If agent paused (waiting for approval) or aborted, stop sending
       if (event.type === 'agent_paused' || event.type === 'done') {
         break;
       }
     }
 
-    // Save conversation
+    // Save conversation: user msg + assistant msg
     if (saveConversation && !clientDisconnected && conversationId) {
       try {
         const convId = conversationId || uuidv4();
         const lastUserMsg = messages[messages.length - 1];
 
+        // Save user message
         await addMessage(convId, { role: 'user', content: lastUserMsg?.content || '' });
-        // Note: the full response is NOT saved here because the agent generates
-        // multiple turns. We save the user message only. Full save is done per-cycle.
+
+        // Save assistant (AI) message if any content was generated
+        if (fullResponse && fullResponse.trim()) {
+          await addMessage(convId, { role: 'assistant', content: fullResponse, toolCalls: allToolCalls || [] });
+        }
 
         sseSend(res, { type: 'conversation_saved', conversationId: convId });
       } catch (saveErr) {
