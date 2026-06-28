@@ -86,9 +86,9 @@ Cả 2 server hiện tại đang được khởi chạy ngầm tự động tron
 - **Backend:** `http://localhost:3747`
 - **Frontend:** `http://localhost:5743`
 
-Bạn có thể chạy tệp tin `start.bat` trong thư mục project để khởi chạy thủ công cả hai cùng một lúc khi mở máy:
+Bạn có thể chạy tệp tin `start.cmd` trong thư mục project để khởi chạy thủ công (chạy ngầm trên Windows và macOS/Linux):
 ```cmd
-start.bat
+start.cmd
 ```
 
 ### Bước 2: Xác thực các API Endpoints bằng Terminal
