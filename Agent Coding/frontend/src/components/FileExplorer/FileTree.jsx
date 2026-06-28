@@ -224,14 +224,6 @@ export default function FileTree() {
     )
   }
 
-  if (!fileTree) {
-    return (
-      <div className="tree-loading">
-        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No files</span>
-      </div>
-    )
-  }
-
   return (
     <div className="file-tree">
       {/* Tree actions toolbar */}
@@ -253,10 +245,15 @@ export default function FileTree() {
           basePath={workspace}
           onConfirm={handleCreateConfirm}
           onCancel={handleCreateCancel}
+          depth={0}
         />
       )}
       {/* Tree */}
-      {fileTree.children ? (
+      {!fileTree || (!fileTree.children && !fileTree.path) ? (
+        <div className="tree-loading" style={{ height: 'auto', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No files</span>
+        </div>
+      ) : fileTree.children ? (
         fileTree.children.map((node, i) => (
           <TreeNode key={node.path || i} node={node} depth={0} />
         ))
