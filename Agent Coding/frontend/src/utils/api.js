@@ -122,6 +122,13 @@ export const api = {
     request(`/files/search?root=${encodeURIComponent(rootPath)}&pattern=${encodeURIComponent(pattern)}`),
   rename: (oldPath, newPath) =>
     request('/files/rename', { method: 'POST', body: { oldPath, newPath } }),
+  // Pagination APIs
+  getConversationsPage: (workspace, page, limit) =>
+    request(`/conversations?workspace=${encodeURIComponent(workspace || '')}&page=${page}&limit=${limit}`),
+  getConversationPage: (id, page, limit) =>
+    request(`/conversations/${id}?page=${page}&limit=${limit}`),
+  getConversationMessagesPage: (id, page, limit) =>
+    request(`/conversations/${id}/messages?page=${page}&limit=${limit}`),
   listDirectory: (dirPath) =>
     request(`/files/list?path=${encodeURIComponent(dirPath)}`),
   getDrives: () =>

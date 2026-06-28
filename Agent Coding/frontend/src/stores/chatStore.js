@@ -36,6 +36,9 @@ function playNotificationSound() {
   }
 }
 
+const CONVERSATIONS_PER_PAGE = 10;
+const MESSAGES_PER_PAGE = 6;
+
 const useChatStore = create((set, get) => ({
   // State
   conversations: [],
@@ -48,22 +51,61 @@ const useChatStore = create((set, get) => ({
   pendingApprovals: [],
   activityLog: [],
   error: null,
-  activeStreams: {},            // conversationId -> { abortController, streamingContent, streamingMessageId, isAgentWorking, isStreaming, agentStatus, agentIterationCount }
+  activeStreams: {},
   // Agent loop state
-  isAgentWorking: false,        // True when agent is in multi-turn coding loop
-  agentStatus: '',              // Current status text (e.g. "Executing tool...")
-  agentIterationCount: 0,       // How many loop iterations done
-  _abortController: null,       // AbortController for the active stream
+  isAgentWorking: false,
+  agentStatus: '',
+  agentIterationCount: 0,
+  _abortController: null,
+  // Pagination state
+  conversationPage: 0,
+  hasMoreConversations: true,
+  isLoadingMoreConversations: false,
+  messagePage: 0,
+  hasMoreMessages: true,
+  isLoadingMoreMessages: false,
+  // Track current workspace for conversation filtering
+  currentWorkspace: null,
 
-  // Load all conversations
-  loadConversations: async () => {
+  // Load conversations for current workspace (lazy pagination)
+  loadConversations: async (reset = false) => {
     try {
-      const data = await api.getConversations()
-      set({ conversations: data || [] })
+      const workspace = useFileStore.getState().workspace
+      if (workspace !== get().currentWorkspace || reset) {
+        set({
+          conversations: [],
+          conversationPage: 0,
+          hasMoreConversations: true,
+          currentWorkspace: workspace,
+          messagePage: 0,
+          hasMoreMessages: true,
+        })
+      }
+
+      const page = reset ? 0 : get().conversationPage
+      if (!get().hasMoreConversations && !reset) return
+
+      set({ isLoading: !reset })
+      const data = await api.getConversationsPage(workspace, page, CONVERSATIONS_PER_PAGE)
+      
+      set(state => ({
+        conversations: reset ? (data.conversations || []) : [...state.conversations, ...(data.conversations || [])],
+        conversationPage: page + 1,
+        hasMoreConversations: data.hasMore !== false && (data.conversations || []).length >= CONVERSATIONS_PER_PAGE,
+        isLoading: false,
+      }))
     } catch (err) {
       console.error('Failed to load conversations:', err)
-      set({ conversations: [] })
+      set({ conversations: [], isLoading: false, hasMoreConversations: false })
     }
+  },
+
+  // Load more conversations (lazy)
+  loadMoreConversations: async () => {
+    if (get().isLoadingMoreConversations || !get().hasMoreConversations) return
+    set({ isLoadingMoreConversations: true })
+    await get().loadConversations(false)
+    set({ isLoadingMoreConversations: false })
   },
 
   // Create new conversation
@@ -103,13 +145,13 @@ const useChatStore = create((set, get) => ({
     }
   },
 
-  // Select conversation
+  // Select conversation with lazy message loading
   selectConversation: async (id) => {
     if (get().activeConversationId === id) return
     try {
-      set({ isLoading: true, activeConversationId: id })
-      const conv = await api.getConversation(id)
-      
+      set({ isLoading: true, activeConversationId: id, messagePage: 0, hasMoreMessages: true })
+      const conv = await api.getConversationPage(id, 0, MESSAGES_PER_PAGE)
+
       const stream = get().activeStreams[id] || {
         isStreaming: false,
         isAgentWorking: false,
@@ -130,11 +172,11 @@ const useChatStore = create((set, get) => ({
         agentStatus: stream.agentStatus,
         agentIterationCount: stream.agentIterationCount,
         _abortController: stream.abortController,
+        hasMoreMessages: conv?.messages?.length >= MESSAGES_PER_PAGE,
       })
     } catch (err) {
       console.error('Failed to load conversation:', err)
       const conv = get().conversations.find(c => c.id === id)
-      
       const stream = get().activeStreams[id] || {
         isStreaming: false,
         isAgentWorking: false,
@@ -144,9 +186,8 @@ const useChatStore = create((set, get) => ({
         agentIterationCount: 0,
         abortController: null,
       }
-
       set({
-        activeConversation: conv ? { ...conv, messages: [] } : null,
+        activeConversation: conv ? { ...conv, messages: conv.messages?.slice(-MESSAGES_PER_PAGE) || [] } : null,
         isLoading: false,
         isStreaming: stream.isStreaming,
         isAgentWorking: stream.isAgentWorking,
@@ -156,6 +197,30 @@ const useChatStore = create((set, get) => ({
         agentIterationCount: stream.agentIterationCount,
         _abortController: stream.abortController,
       })
+    }
+  },
+
+  // Load more messages (older) for current conversation
+  loadMoreMessages: async () => {
+    if (get().isLoadingMoreMessages || !get().hasMoreMessages) return
+    const convId = get().activeConversationId
+    if (!convId) return
+    set({ isLoadingMoreMessages: true })
+    try {
+      const nextPage = get().messagePage + 1
+      const olderMessages = await api.getConversationMessagesPage(convId, nextPage, MESSAGES_PER_PAGE)
+      set(state => ({
+        activeConversation: state.activeConversation ? {
+          ...state.activeConversation,
+          messages: [...(olderMessages || []), ...(state.activeConversation.messages || [])]
+        } : null,
+        messagePage: nextPage,
+        hasMoreMessages: (olderMessages || []).length >= MESSAGES_PER_PAGE,
+        isLoadingMoreMessages: false,
+      }))
+    } catch (err) {
+      console.error('Failed to load more messages:', err)
+      set({ isLoadingMoreMessages: false })
     }
   },
 
@@ -404,7 +469,8 @@ const useChatStore = create((set, get) => ({
               } : {})
             }
           })
-        },        // onActivity - agent progress log
+        },
+        // onActivity - agent progress log
         (activityMsg, iteration) => {
           set(state => {
             const currentStream = state.activeStreams[convId] || {}

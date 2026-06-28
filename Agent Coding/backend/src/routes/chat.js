@@ -631,8 +631,27 @@ router.post('/', async (req, res) => {
 // ─── Conversation CRUD ────────────────────────────────────────────────────────
 router.get('/conversations', async (req, res) => {
   try {
-    const list = await listConversations();
-    res.json(list);
+    const { workspace, page: pageStr, limit: limitStr } = req.query;
+    const page = parseInt(pageStr) || 0;
+    const limit = parseInt(limitStr) || 10;
+
+    let list = await listConversations();
+
+    // Filter by workspace if specified
+    if (workspace) {
+      list = list.filter(c => c.workspace === workspace);
+    }
+
+    // Sort by updatedAt descending (most recent first)
+    list.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+    // Paginate
+    const total = list.length;
+    const start = page * limit;
+    const paginatedList = list.slice(start, start + limit);
+    const hasMore = start + limit < total;
+
+    res.json({ conversations: paginatedList, total, hasMore, page, limit });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -649,9 +668,50 @@ router.post('/conversations', async (req, res) => {
 
 router.get('/conversations/:id', async (req, res) => {
   try {
+    const { page: pageStr, limit: limitStr } = req.query;
+    const page = parseInt(pageStr) || 0;
+    const limit = parseInt(limitStr) || 6;
+
     const conv = await getConversation(req.params.id);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    res.json(conv);
+
+    // Paginate messages (return most recent `limit` messages)
+    const allMessages = conv.messages || [];
+    const total = allMessages.length;
+    const start = page * limit;
+    const paginatedMessages = allMessages.slice(start, start + limit);
+    const hasMore = start + limit < total;
+
+    res.json({
+      ...conv,
+      messages: paginatedMessages,
+      hasMoreMessages: hasMore,
+      messagePage: page,
+      totalMessages: total,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /conversations/:id/messages ──────────────────────────────────────────
+// Returns paginated messages for a conversation (older messages via lazy load)
+router.get('/conversations/:id/messages', async (req, res) => {
+  try {
+    const { page: pageStr, limit: limitStr } = req.query;
+    const page = parseInt(pageStr) || 0;
+    const limit = parseInt(limitStr) || 6;
+
+    const conv = await getConversation(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    const allMessages = conv.messages || [];
+    const total = allMessages.length;
+    const start = page * limit;
+    const paginatedMessages = allMessages.slice(start, start + limit);
+    const hasMore = start + limit < total;
+
+    res.json({ messages: paginatedMessages, hasMore, page, total });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
