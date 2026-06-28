@@ -15,9 +15,10 @@ const FILE_EXTENSIONS = [
   '.vue', '.svelte', '. astro', '.prisma', '.graphql', '.proto',
 ]
 
-function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
+function InlineNewFileInput({ type, basePath, onConfirm, onCancel, depth = 1 }) {
   const [name, setName] = useState('')
   const inputRef = useRef(null)
+  const isSubmitting = useRef(false)
   const language = useSettingsStore(state => state.language)
   const t = useTranslation(language)
 
@@ -26,6 +27,7 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
   }, [])
 
   const handleSubmit = () => {
+    if (isSubmitting.current) return
     const trimmed = name.trim()
     if (!trimmed) {
       onCancel()
@@ -33,13 +35,18 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
     }
     if (type === 'file') {
       // Validate: must have extension
-      const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || trimmed.includes('.')
+      const hasExtension = FILE_EXTENSIONS.some(ext => trimmed.toLowerCase().endsWith(ext)) || (trimmed.includes('.') && trimmed.split('.').pop().length > 0)
       if (!hasExtension) {
-        // Auto-append .txt if no extension
-        onConfirm(`${basePath}/${trimmed}.txt`)
-      } else {
-        onConfirm(`${basePath}/${trimmed}`)
+        isSubmitting.current = true
+        alert(language === 'vi'
+          ? 'Vui lòng nhập phần mở rộng của tệp (ví dụ: .txt, .md, .json, .py, .html, .css)'
+          : 'Please specify a valid file extension (e.g., .txt, .md, .json, .py, .html, .css)'
+        )
+        isSubmitting.current = false
+        setTimeout(() => { if (inputRef.current) inputRef.current.focus() }, 50)
+        return
       }
+      onConfirm(`${basePath}/${trimmed}`)
     } else {
       onConfirm(`${basePath}/${trimmed}`)
     }
@@ -51,7 +58,7 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
   }
 
   return (
-    <div className="tree-item" style={{ paddingLeft: '28px', gap: '2px', display: 'flex', alignItems: 'center' }}>
+    <div className="tree-item" style={{ paddingLeft: `${12 + depth * 16}px`, gap: '2px', display: 'flex', alignItems: 'center' }}>
       <span className="tree-icon" style={{ fontSize: '12px' }}>
         {type === 'file' ? '📄' : '📁'}
       </span>
@@ -62,7 +69,17 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
         value={name}
         onChange={e => setName(e.target.value)}
         onKeyDown={handleKeyDown}
-        onBlur={() => { if (!name.trim()) onCancel() }}
+        onBlur={() => {
+          setTimeout(() => {
+            if (isSubmitting.current) return
+            const trimmed = name.trim()
+            if (!trimmed) {
+              onCancel()
+            } else {
+              handleSubmit()
+            }
+          }, 150)
+        }}
         placeholder={type === 'file' ? 'filename.ext' : 'folder-name'}
         style={{ flex: 1, fontSize: '11px', padding: '1px 4px', height: '20px', minWidth: 0 }}
       />
@@ -78,7 +95,9 @@ function InlineNewFileInput({ type, basePath, onConfirm, onCancel }) {
 
 function TreeNode({ node, depth = 0 }) {
   const [expanded, setExpanded] = useState(depth === 0)
-  const { openFile, activeFilePath, deleteFile } = useFileStore()
+  const [creating, setCreating] = useState(null) // 'file' or 'folder' or null
+  const { openFile, activeFilePath, deleteFile, createFile, createDirectory } = useFileStore()
+  const language = useSettingsStore(state => state.language)
 
   const isDir = node.isDir || node.type === 'directory'
   const isActive = !isDir && activeFilePath === node.path
@@ -98,6 +117,29 @@ function TreeNode({ node, depth = 0 }) {
     }
   }
 
+  const handleCreateFile = (e) => {
+    e.stopPropagation()
+    setExpanded(true)
+    setCreating('file')
+  }
+
+  const handleCreateDir = (e) => {
+    e.stopPropagation()
+    setExpanded(true)
+    setCreating('folder')
+  }
+
+  const handleCreateConfirm = async (fullPath) => {
+    if (creating === 'file') {
+      await createFile(fullPath)
+    } else {
+      await createDirectory(fullPath)
+    }
+    setCreating(null)
+  }
+
+  const handleCreateCancel = () => setCreating(null)
+
   return (
     <div className="tree-node">
       <div
@@ -113,17 +155,36 @@ function TreeNode({ node, depth = 0 }) {
         <span className="tree-icon">{isDir ? (expanded ? '📂' : '📁') : getFileIcon(node.name)}</span>
         <span className="tree-name">{node.name}</span>
         <div className="tree-actions">
-          <button className="tree-action-btn" onClick={handleDelete} title="Delete">
+          {isDir && (
+            <>
+              <button className="tree-action-btn" onClick={handleCreateFile} title="New file">
+                <FilePlus size={12} />
+              </button>
+              <button className="tree-action-btn" onClick={handleCreateDir} title="New folder">
+                <FolderPlus size={12} />
+              </button>
+            </>
+          )}
+          <button className="tree-action-btn danger" onClick={handleDelete} title="Delete">
             <Trash2 size={12} />
           </button>
         </div>
       </div>
-      {isDir && expanded && node.children && (
+      {isDir && expanded && (
         <div className="tree-children">
-          {node.children.map((child, i) => (
+          {creating && (
+            <InlineNewFileInput
+              type={creating}
+              basePath={node.path}
+              onConfirm={handleCreateConfirm}
+              onCancel={handleCreateCancel}
+              depth={depth + 1}
+            />
+          )}
+          {node.children && node.children.map((child, i) => (
             <TreeNode key={child.path || i} node={child} depth={depth + 1} />
           ))}
-          {node.children.length === 0 && (
+          {(!node.children || node.children.length === 0) && !creating && (
             <div className="tree-empty" style={{ paddingLeft: `${28 + depth * 16}px` }}>
               Empty folder
             </div>

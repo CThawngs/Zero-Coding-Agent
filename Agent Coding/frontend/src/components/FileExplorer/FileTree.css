@@ -85,6 +85,11 @@
 }
 
 .tree-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.tree-action-btn.danger:hover {
   background: rgba(239, 68, 68, 0.15);
   color: var(--error);
 }

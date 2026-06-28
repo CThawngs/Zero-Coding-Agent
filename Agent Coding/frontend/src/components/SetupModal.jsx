@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, ChevronRight, Check } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
+import useSettingsStore from '../stores/settingsStore'
 import { useTranslation } from '../utils/translations'
 import './SetupModal.css'
 
@@ -34,9 +35,12 @@ export default function SetupModal({ onComplete }) {
   const [apiKey, setApiKey] = useState('')
   const [customName, setCustomName] = useState('Custom Endpoint')
   const [baseUrl, setBaseUrl] = useState('')
+  const [modelInput, setModelInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
-  const t = useTranslation()
+
+  const language = useSettingsStore(state => state.language)
+  const t = useTranslation(language)
 
   const { saveApiKey, connectOllama, connectLMStudio, selectProvider, selectModel, getModelsForProvider } = useProviderStore()
 
@@ -79,21 +83,28 @@ export default function SetupModal({ onComplete }) {
       }
       setSaving(false)
 
-      // Set default model
-      const models = getModelsForProvider(selectedProvider)
-      if (models.length > 0) {
-        selectProvider(selectedProvider)
-        selectModel(models[0].id)
+      const isDynamic = selectedProvider === 'openrouter' || selectedProvider === 'custom' || selectedProvider === '9router'
+      if (isDynamic) {
+        setStep(2)
       } else {
-        // Fallback for custom model if empty
-        const defaultModel = selectedProvider === '9router' ? '9router-model' : 'custom-model'
-        store.addCustomModel(selectedProvider, defaultModel)
-        selectProvider(selectedProvider)
-        selectModel(defaultModel)
+        // Set default model for predefined/local providers
+        const models = getModelsForProvider(selectedProvider)
+        if (models.length > 0) {
+          selectProvider(selectedProvider)
+          selectModel(models[0].id)
+        }
+        setDone(true)
+        setTimeout(() => onComplete(), 1500)
       }
-
-      setDone(true)
-      setTimeout(() => onComplete(), 1500)
+    } else if (step === 2) {
+      if (modelInput.trim()) {
+        const store = useProviderStore.getState()
+        store.addCustomModel(selectedProvider, modelInput.trim())
+        selectProvider(selectedProvider)
+        selectModel(modelInput.trim())
+        setDone(true)
+        setTimeout(() => onComplete(), 1500)
+      }
     }
   }
 
@@ -114,6 +125,12 @@ export default function SetupModal({ onComplete }) {
               <div className={`step-dot ${step >= 0 ? 'active' : ''}`} />
               <div className="step-line" />
               <div className={`step-dot ${step >= 1 ? 'active' : ''}`} />
+              {(selectedProvider === 'openrouter' || selectedProvider === 'custom' || selectedProvider === '9router') && (
+                <>
+                  <div className="step-line" />
+                  <div className={`step-dot ${step >= 2 ? 'active' : ''}`} />
+                </>
+              )}
             </div>
 
             {step === 0 && (
@@ -132,12 +149,12 @@ export default function SetupModal({ onComplete }) {
                           <img src={PROVIDER_ICONS[pid]} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                         ) : (
                           <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                            {PROVIDER_MODELS[pid].name[0]}
+                            {PROVIDER_MODELS[pid]?.name ? PROVIDER_MODELS[pid].name[0] : pid[0].toUpperCase()}
                           </div>
                         )}
                       </div>
                       <div className="option-meta">
-                        <div className="option-name">{PROVIDER_MODELS[pid].name}</div>
+                        <div className="option-name">{PROVIDER_MODELS[pid]?.name || pid}</div>
                         <div className="option-desc">{PROVIDER_DESCRIPTIONS[pid]}</div>
                       </div>
                       {selectedProvider === pid && <Check size={16} className="option-check" />}
@@ -162,11 +179,11 @@ export default function SetupModal({ onComplete }) {
                       <img src={PROVIDER_ICONS[selectedProvider]} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
                     ) : (
                       <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                        {PROVIDER_MODELS[selectedProvider].name[0]}
+                        {PROVIDER_MODELS[selectedProvider]?.name ? PROVIDER_MODELS[selectedProvider].name[0] : selectedProvider[0].toUpperCase()}
                       </div>
                     )}
                    </span>
-                  <h2>Cấu hình {PROVIDER_MODELS[selectedProvider].name}</h2>
+                  <h2>Cấu hình {PROVIDER_MODELS[selectedProvider]?.name || selectedProvider}</h2>
                 </div>
 
                 {isLocal ? (
@@ -252,6 +269,43 @@ export default function SetupModal({ onComplete }) {
                   >
                     {saving ? 'Connecting...' : (isLocal ? 'Connect' : 'Save & Continue')}
                     {!saving && <ChevronRight size={16} />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="setup-step">
+                <div className="step-provider-header">
+                  <h2>Thêm Model LLM</h2>
+                </div>
+                <p className="setup-desc" style={{ marginBottom: '16px' }}>
+                  {selectedProvider === 'openrouter' 
+                    ? 'OpenRouter hỗ trợ hàng trăm model. Vui lòng nhập ID model cụ thể bạn muốn sử dụng (ví dụ: google/gemini-2.5-flash, deepseek/deepseek-chat):'
+                    : selectedProvider === '9router'
+                    ? '9Router hỗ trợ nhiều model. Vui lòng nhập ID model cụ thể bạn muốn sử dụng (ví dụ: google/gemini-2.0-flash, openai/gpt-4o):'
+                    : 'Vui lòng nhập ID model của API Endpoint này:'}
+                </p>
+                <input
+                  autoFocus
+                  type="text"
+                  className="setup-input"
+                  placeholder="ID model (e.g. google/gemini-2.5-flash)"
+                  value={modelInput}
+                  onChange={e => setModelInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && modelInput.trim() && handleNext()}
+                />
+                
+                <div className="setup-nav" style={{ marginTop: '20px' }}>
+                  <button className="btn-ghost setup-back" onClick={() => setStep(1)}>
+                    ← Back
+                  </button>
+                  <button
+                    className="btn-primary setup-cta"
+                    onClick={handleNext}
+                    disabled={!modelInput.trim()}
+                  >
+                    Add & Continue <ChevronRight size={16} />
                   </button>
                 </div>
               </div>

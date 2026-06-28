@@ -296,7 +296,7 @@ router.post('/select-directory', async (req, res) => {
           $f.SelectedPath
         }
       `;
-      const { stdout, stderr } = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`);
+      const { stdout, stderr } = await execAsync(`powershell -NoProfile -STA -Command "${psScript.replace(/\n/g, ' ')}"`);
       if (stderr) {
         console.error("[SelectDirectory] PowerShell stderr:", stderr);
       }
@@ -348,7 +348,7 @@ router.post('/resolve-directory', async (req, res) => {
         }
       `;
       const { stdout } = await execAsync(
-        `powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`
+        `powershell -NoProfile -STA -Command "${psScript.replace(/\n/g, ' ')}"`
       );
       const selectedPath = stdout.trim();
       if (selectedPath) {

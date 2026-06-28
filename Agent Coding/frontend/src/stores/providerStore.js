@@ -150,7 +150,8 @@ const useProviderStore = create(
           (providers.openai.apiKey && providers.openai.connected) ||
           (providers.anthropic.apiKey && providers.anthropic.connected) ||
           (providers.openrouter.apiKey && providers.openrouter.connected) ||
-          (providers['9router']?.apiKey && providers['9router']?.connected) ||
+          (providers['9router']?.connected) ||
+          (providers.custom?.connected) ||
           providers.ollama.connected ||
           providers.lmstudio.connected
         )
