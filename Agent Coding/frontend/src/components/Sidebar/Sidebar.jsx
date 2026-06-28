@@ -14,7 +14,7 @@ export default function Sidebar({ onSettings }) {
     conversations, activeConversationId,
     createConversation, selectConversation,
     deleteConversation, updateConversation,
-    isAgentWorking
+    isAgentWorking, activeStreams
   } = useChatStore()
   const { activeProvider, activeModel, providers } = useProviderStore()
   
@@ -123,6 +123,7 @@ export default function Sidebar({ onSettings }) {
     const isHovered = hoveredId === conv.id
     const isEditing = editingId === conv.id
     const badge = getProviderBadge(conv)
+    const isWorking = activeStreams[conv.id]?.isAgentWorking || activeStreams[conv.id]?.isStreaming
 
     return (
       <div
@@ -133,11 +134,7 @@ export default function Sidebar({ onSettings }) {
         onMouseLeave={() => setHoveredId(null)}
       >
         <div className="conv-item-icon">
-          {isAgentWorking && isActive ? (
-            <Loader2 size={13} className="spin" style={{ color: 'var(--accent-primary)' }} />
-          ) : (
-            <MessageSquare size={13} />
-          )}
+          <MessageSquare size={13} />
         </div>
         <div className="conv-item-body">
           {isEditing ? (
@@ -165,7 +162,10 @@ export default function Sidebar({ onSettings }) {
             </>
           )}
         </div>
-        {!isEditing && (isActive || isHovered) && (
+        {isWorking && (
+          <Loader2 size={13} className="spin" style={{ color: 'var(--accent-primary)', flexShrink: 0, marginLeft: '4px', marginRight: '4px' }} />
+        )}
+        {!isEditing && (isActive || isHovered) && !isWorking && (
           <div className="conv-actions" onClick={e => e.stopPropagation()}>
             <button
               className="btn btn-ghost btn-icon conv-action-btn"

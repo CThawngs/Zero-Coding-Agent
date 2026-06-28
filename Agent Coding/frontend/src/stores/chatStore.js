@@ -47,6 +47,7 @@ const useChatStore = create((set, get) => ({
   streamingMessageId: null,
   pendingApprovals: [],
   error: null,
+  activeStreams: {},            // conversationId -> { abortController, streamingContent, streamingMessageId, isAgentWorking, isStreaming, agentStatus, agentIterationCount }
   // Agent loop state
   isAgentWorking: false,        // True when agent is in multi-turn coding loop
   agentStatus: '',              // Current status text (e.g. "Executing tool...")
@@ -107,11 +108,53 @@ const useChatStore = create((set, get) => ({
     try {
       set({ isLoading: true, activeConversationId: id })
       const conv = await api.getConversation(id)
-      set({ activeConversation: conv, isLoading: false })
+      
+      const stream = get().activeStreams[id] || {
+        isStreaming: false,
+        isAgentWorking: false,
+        streamingContent: '',
+        streamingMessageId: null,
+        agentStatus: '',
+        agentIterationCount: 0,
+        abortController: null,
+      }
+
+      set({
+        activeConversation: conv,
+        isLoading: false,
+        isStreaming: stream.isStreaming,
+        isAgentWorking: stream.isAgentWorking,
+        streamingContent: stream.streamingContent,
+        streamingMessageId: stream.streamingMessageId,
+        agentStatus: stream.agentStatus,
+        agentIterationCount: stream.agentIterationCount,
+        _abortController: stream.abortController,
+      })
     } catch (err) {
       console.error('Failed to load conversation:', err)
       const conv = get().conversations.find(c => c.id === id)
-      set({ activeConversation: conv ? { ...conv, messages: [] } : null, isLoading: false })
+      
+      const stream = get().activeStreams[id] || {
+        isStreaming: false,
+        isAgentWorking: false,
+        streamingContent: '',
+        streamingMessageId: null,
+        agentStatus: '',
+        agentIterationCount: 0,
+        abortController: null,
+      }
+
+      set({
+        activeConversation: conv ? { ...conv, messages: [] } : null,
+        isLoading: false,
+        isStreaming: stream.isStreaming,
+        isAgentWorking: stream.isAgentWorking,
+        streamingContent: stream.streamingContent,
+        streamingMessageId: stream.streamingMessageId,
+        agentStatus: stream.agentStatus,
+        agentIterationCount: stream.agentIterationCount,
+        _abortController: stream.abortController,
+      })
     }
   },
 
@@ -253,27 +296,49 @@ const useChatStore = create((set, get) => ({
     }))
     const messagesForApi = [...existingMessages, { role: 'user', content }]
 
-    set(state => ({
-      activeConversation: {
-        ...state.activeConversation,
-        messages: [...(state.activeConversation?.messages || []), userMsg]
-      },
+    const abortController = new AbortController();
+
+    const activeStreamState = {
       isStreaming: true,
       isAgentWorking: true,
       agentStatus: 'Thinking...',
       agentIterationCount: 0,
       streamingContent: '',
       streamingMessageId: assistantMsgId,
-    }))
+      abortController
+    }
+
+    set(state => {
+      const nextStreams = {
+        ...state.activeStreams,
+        [convId]: activeStreamState
+      }
+      const isCurrent = state.activeConversationId === convId
+      return {
+        activeStreams: nextStreams,
+        conversations: state.conversations.map(c => 
+          c.id === convId ? { ...c, isWorking: true } : c
+        ),
+        ...(isCurrent ? {
+          activeConversation: {
+            ...state.activeConversation,
+            messages: [...(state.activeConversation?.messages || []), userMsg]
+          },
+          isStreaming: true,
+          isAgentWorking: true,
+          agentStatus: 'Thinking...',
+          agentIterationCount: 0,
+          streamingContent: '',
+          streamingMessageId: assistantMsgId,
+          _abortController: abortController
+        } : {})
+      }
+    })
 
     try {
       const providerState = useProviderStore.getState().providers[provider]
       const customApiKey = providerState?.apiKey
       const customBaseURL = providerState?.baseUrl
-
-      // Create an AbortController for this stream
-      const abortController = new AbortController();
-      set({ _abortController: abortController });
 
       const cancelStream = streamChat(
         {
@@ -290,54 +355,110 @@ const useChatStore = create((set, get) => ({
         },
         // onChunk
         (chunk) => {
-          set(state => ({ 
-            streamingContent: state.streamingContent + chunk,
-            agentStatus: 'Coding...'
-          }))
+          set(state => {
+            const currentStream = state.activeStreams[convId] || {}
+            const nextStreams = {
+              ...state.activeStreams,
+              [convId]: {
+                ...currentStream,
+                streamingContent: (currentStream.streamingContent || '') + chunk,
+                agentStatus: 'Coding...'
+              }
+            }
+            const isCurrent = state.activeConversationId === convId
+            return {
+              activeStreams: nextStreams,
+              ...(isCurrent ? {
+                streamingContent: nextStreams[convId].streamingContent,
+                agentStatus: nextStreams[convId].agentStatus
+              } : {})
+            }
+          })
         },
         // onToolCall
         (toolCall) => {
-          if (toolCall.requiresApproval) {
-            get().addPendingApproval(toolCall)
-            set({ 
-              agentStatus: '⏸ Awaiting approval...',
-              agentIterationCount: get().agentIterationCount + 1
-            })
-          } else {
-            set({ 
-              agentStatus: `▶ Executing: ${(toolCall.tool || '').replace(/_/g, ' ')}...`,
-              agentIterationCount: get().agentIterationCount + 1
-            })
-          }
+          set(state => {
+            const currentStream = state.activeStreams[convId] || {}
+            const isApproval = toolCall.requiresApproval
+            const status = isApproval ? '⏸ Awaiting approval...' : `▶ Executing: ${(toolCall.tool || '').replace(/_/g, ' ')}...`
+            
+            if (isApproval) {
+              get().addPendingApproval({ ...toolCall, conversationId: convId })
+            }
+
+            const nextStreams = {
+              ...state.activeStreams,
+              [convId]: {
+                ...currentStream,
+                agentStatus: status,
+                agentIterationCount: (currentStream.agentIterationCount || 0) + 1
+              }
+            }
+            const isCurrent = state.activeConversationId === convId
+            return {
+              activeStreams: nextStreams,
+              ...(isCurrent ? {
+                agentStatus: status,
+                agentIterationCount: nextStreams[convId].agentIterationCount
+              } : {})
+            }
+          })
         },
         // onDone
         (finalContent, toolCalls, extra) => {
+          const currentStream = get().activeStreams[convId] || {}
           const assistantMsg = {
             id: assistantMsgId,
             role: 'assistant',
-            content: finalContent || get().streamingContent,
+            content: finalContent || currentStream.streamingContent || '',
             toolCalls: toolCalls || [],
             timestamp: new Date().toISOString(),
           }
+
           set(state => {
-            // If paused (awaiting approval), keep isAgentWorking = true
-            const isPaused = extra?.paused === true;
+            const isPaused = extra?.paused === true
+            const nextStreams = { ...state.activeStreams }
+            if (isPaused) {
+              nextStreams[convId] = {
+                ...nextStreams[convId],
+                isStreaming: false,
+                isAgentWorking: true,
+                agentStatus: '⏸ Awaiting approval...',
+              }
+            } else {
+              delete nextStreams[convId]
+            }
+            
+            const isCurrent = state.activeConversationId === convId
+            let activeConvUpdate = {}
+            if (isCurrent) {
+              activeConvUpdate = {
+                activeConversation: {
+                  ...state.activeConversation,
+                  messages: [...(state.activeConversation?.messages || []), assistantMsg]
+                },
+                isStreaming: false,
+                isAgentWorking: isPaused,
+                agentStatus: isPaused ? '⏸ Awaiting approval...' : '',
+                streamingContent: '',
+                streamingMessageId: null,
+                _abortController: null,
+              }
+            }
+            
+            // Play notification sound if background task completed
+            if (!isCurrent && !isPaused) {
+              playNotificationSound()
+            }
+            
             return {
-              activeConversation: {
-                ...state.activeConversation,
-                messages: [...(state.activeConversation?.messages || []), assistantMsg]
-              },
-              isStreaming: false,
-              isAgentWorking: !isPaused,
-              agentStatus: isPaused ? '⏸ Awaiting approval...' : '',
-              streamingContent: '',
-              streamingMessageId: null,
-              _abortController: null,
+              activeStreams: nextStreams,
               conversations: state.conversations.map(c =>
                 c.id === convId
                   ? { ...c, updatedAt: new Date().toISOString(), title: c.title === 'New Chat' ? content.slice(0, 50) : c.title }
                   : c
-              )
+              ),
+              ...activeConvUpdate
             }
           })
         },
@@ -345,84 +466,134 @@ const useChatStore = create((set, get) => ({
         (err) => {
           console.error('Stream error:', err)
           set(state => {
+            const currentStream = state.activeStreams[convId] || {}
             const errMsg = {
               id: assistantMsgId,
               role: 'assistant',
-              content: get().streamingContent || `❌ Error: ${err.message || 'Stream failed'}`,
+              content: currentStream.streamingContent || `❌ Error: ${err.message || 'Stream failed'}`,
               error: true,
               timestamp: new Date().toISOString(),
             }
+            
+            const nextStreams = { ...state.activeStreams }
+            delete nextStreams[convId]
+            
+            const isCurrent = state.activeConversationId === convId
+            let activeConvUpdate = {}
+            if (isCurrent) {
+              activeConvUpdate = {
+                activeConversation: {
+                  ...state.activeConversation,
+                  messages: [...(state.activeConversation?.messages || []), errMsg]
+                },
+                isStreaming: false,
+                isAgentWorking: false,
+                agentStatus: '',
+                streamingContent: '',
+                streamingMessageId: null,
+                _abortController: null,
+              }
+            }
+            
             return {
-              activeConversation: {
-                ...state.activeConversation,
-                messages: [...(state.activeConversation?.messages || []), errMsg]
-              },
-              isStreaming: false,
-              isAgentWorking: false,
-              agentStatus: '',
-              streamingContent: '',
-              streamingMessageId: null,
-              _abortController: null,
+              activeStreams: nextStreams,
+              ...activeConvUpdate
             }
           })
         },
         abortController.signal
       )
 
-      // Store cancel function
-      set({ _cancelStream: cancelStream });
+      set(state => {
+        const currentStream = state.activeStreams[convId] || {}
+        return {
+          activeStreams: {
+            ...state.activeStreams,
+            [convId]: {
+              ...currentStream,
+              cancelStream
+            }
+          }
+        }
+      })
 
     } catch (err) {
       console.error('Stream failed:', err)
-      set({ isStreaming: false, isAgentWorking: false, streamingContent: '', streamingMessageId: null, _abortController: null })
+      set(state => {
+        const nextStreams = { ...state.activeStreams }
+        delete nextStreams[convId]
+        const isCurrent = state.activeConversationId === convId
+        return {
+          activeStreams: nextStreams,
+          ...(isCurrent ? {
+            isStreaming: false,
+            isAgentWorking: false,
+            streamingContent: '',
+            streamingMessageId: null,
+            _abortController: null
+          } : {})
+        }
+      })
     }
   },
 
   // Stop the agent immediately
-  stopAgent: async () => {
-    const { activeConversationId, _abortController } = get()
-    
-    // Abort the fetch signal
-    if (_abortController) {
-      _abortController.abort()
+  stopAgent: async (convId = null) => {
+    const targetId = convId || get().activeConversationId
+    if (!targetId) return
+
+    const stream = get().activeStreams[targetId]
+    if (stream && stream.abortController) {
+      stream.abortController.abort()
     }
 
-    // Also tell backend to clean up
-    if (activeConversationId) {
-      try {
-        await api.stopStream(activeConversationId)
-      } catch (err) {
-        console.error('Stop stream API call failed:', err)
+    try {
+      await api.stopStream(targetId)
+    } catch (err) {
+      console.error('Stop stream API call failed:', err)
+    }
+
+    const streamingContent = stream?.streamingContent || ''
+
+    set(state => {
+      const nextStreams = { ...state.activeStreams }
+      delete nextStreams[targetId]
+
+      const isCurrent = state.activeConversationId === targetId
+      let activeUpdate = {}
+
+      if (isCurrent) {
+        let messages = state.activeConversation?.messages || []
+        if (streamingContent) {
+          messages = [
+            ...messages,
+            {
+              id: `msg-stop-${Date.now()}`,
+              role: 'assistant',
+              content: streamingContent + '\n\n*(Agent stopped by user)*',
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        }
+        activeUpdate = {
+          activeConversation: {
+            ...state.activeConversation,
+            messages
+          },
+          isStreaming: false,
+          isAgentWorking: false,
+          agentStatus: '⏹ Stopped',
+          streamingContent: '',
+          streamingMessageId: null,
+          _abortController: null,
+        }
       }
-    }
 
-    set({
-      isStreaming: false,
-      isAgentWorking: false,
-      agentStatus: '⏹ Stopped',
-      streamingContent: '',
-      streamingMessageId: null,
-      _abortController: null,
+      return {
+        activeStreams: nextStreams,
+        ...activeUpdate
+      }
     })
-
-    // If there's streaming content, save it as the assistant message
-    const streamingContent = get().streamingContent
-    if (streamingContent && get().activeConversation) {
-      const stopMsg = {
-        id: `msg-stop-${Date.now()}`,
-        role: 'assistant',
-        content: streamingContent + '\n\n*(Agent stopped by user)*',
-        timestamp: new Date().toISOString(),
-      }
-      set(state => ({
-        activeConversation: {
-          ...state.activeConversation,
-          messages: [...(state.activeConversation?.messages || []), stopMsg]
-        },
-        streamingContent: '',
-        streamingMessageId: null,
-      }))
-    }
   },
 
   // HITL - Approve command

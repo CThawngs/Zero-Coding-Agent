@@ -30,6 +30,7 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
 
   const messages = activeConversation?.messages || []
   const isEmpty = messages.length === 0
+  const activeApprovals = pendingApprovals.filter(app => app.conversationId === activeConversation?.id)
 
   const suggestions = [
     t('sugg1'),
@@ -347,9 +348,9 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
       </div>
 
       {/* Pending approvals */}
-      {pendingApprovals.length > 0 && (
+      {activeApprovals.length > 0 && (
         <div className="approvals-container">
-          {pendingApprovals.map(approval => (
+          {activeApprovals.map(approval => (
             <TerminalApproval key={approval.id} approval={approval} />
           ))}
         </div>
