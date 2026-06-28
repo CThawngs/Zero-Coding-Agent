@@ -9,7 +9,6 @@ import { getFileIcon } from '../../utils/fileUtils'
 import './FileExplorer.css'
 import FileTree from './FileTree'
 import CodeEditor from './CodeEditor'
-import FolderBrowserModal from './FolderBrowserModal'
 
 export default function FileExplorer() {
   const { workspace, setWorkspace, fileTree, refreshTree, openFiles, activeFilePath } = useFileStore()
@@ -17,8 +16,8 @@ export default function FileExplorer() {
   const t = useTranslation(language)
   const [showPathInput, setShowPathInput] = useState(false)
   const [pathInput, setPathInput] = useState('')
-  const [showBrowserModal, setShowBrowserModal] = useState(false)
   const pathInputRef = useRef(null)
+  const folderInputRef = useRef(null)
 
   useEffect(() => {
     if (showPathInput && pathInputRef.current) {
@@ -26,13 +25,45 @@ export default function FileExplorer() {
     }
   }, [showPathInput])
 
+  // Open native OS folder dialog via hidden input
   const handleOpenFolder = () => {
-    setShowBrowserModal(true)
+    if (folderInputRef.current) {
+      folderInputRef.current.click()
+    }
   }
 
-  const handleBrowseSelect = (path) => {
-    setWorkspace(path)
-    setShowBrowserModal(false)
+  const handleFolderSelected = (e) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      // Get folder path from first file's webkitRelativePath
+      // e.g. "FolderName/sub/file.txt" → workspace = "FolderName"
+      const parts = files[0].webkitRelativePath.split('/')
+      if (parts.length > 0) {
+        // The root folder name is the workspace
+        const folderName = parts[0]
+        setWorkspace(`./workspace/${folderName}`)
+        // For cloud mode, set directly
+        if (api.getConnectionMode() !== 'cloud') {
+          // Try to get full path from file path if available
+          try {
+            const filePath = files[0].name ? `${folderName}` : folderName
+            setWorkspace(filePath)
+          } catch {
+            setWorkspace(`./workspace/${folderName}`)
+          }
+        }
+      }
+    }
+    // Reset input so we can select same folder again
+    e.target.value = null
+  }
+
+  // Inline path input as fallback
+  const handleWorkspaceIconClick = () => {
+    if (!showPathInput) {
+      setShowPathInput(true)
+      setPathInput(workspace || '')
+    }
   }
 
   const handlePathSubmit = () => {
@@ -83,38 +114,24 @@ export default function FileExplorer() {
         </div>
       </div>
 
-      {/* Inline path input (VSCode-style) */}
-      {showPathInput && (
-        <div className="explorer-path-input" style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          padding: '4px 8px', borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-secondary)'
-        }}>
-          <input
-            ref={pathInputRef}
-            type="text"
-            className="settings-input"
-            value={pathInput}
-            onChange={e => setPathInput(e.target.value)}
-            onKeyDown={handlePathKeyDown}
-            placeholder={api.getConnectionMode() === 'cloud' ? 'e.g. project-1' : 'e.g. C:\\Users\\nguye\\Projects\\my-app'}
-            style={{ flex: 1, fontSize: '12px', padding: '4px 8px' }}
-          />
-          <button className="icon-btn icon-btn-sm" onClick={handlePathSubmit} title="Open">
-            <Check size={13} style={{ color: 'var(--success)' }} />
-          </button>
-          <button className="icon-btn icon-btn-sm" onClick={() => setShowPathInput(false)} title="Cancel">
-            <X size={13} />
-          </button>
-        </div>
-      )}
-
-      {/* Workspace path */}
-      {workspace && !showPathInput && (
-        <div className="workspace-path" style={{ cursor: 'pointer' }} onClick={handleOpenFolder} title="Click to change workspace">
+      {/* Workspace path (click to browse via native dialog) */}
+      {workspace && (
+        <div className="workspace-path" style={{ cursor: 'pointer' }} onClick={handleOpenFolder} title="Click to change workspace (opens OS dialog)">
+          <FolderOpen size={12} style={{ marginRight: '4px', flexShrink: 0 }} />
           <span title={workspace}>{workspace}</span>
         </div>
       )}
+
+      {/* Hidden input for native OS folder picker */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        directory=""
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleFolderSelected}
+      />
 
       <div className="explorer-body">
         {/* File tree */}
@@ -139,14 +156,6 @@ export default function FileExplorer() {
           </div>
         )}
       </div>
-
-      {/* Folder Browser Modal */}
-      <FolderBrowserModal
-        isOpen={showBrowserModal}
-        onClose={() => setShowBrowserModal(false)}
-        onSelect={handleBrowseSelect}
-        currentWorkspace={workspace}
-      />
     </div>
   )
 }
