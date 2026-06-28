@@ -129,6 +129,18 @@ export const api = {
   resolveFolder: (folderName) =>
     request('/files/resolve-folder', { method: 'POST', body: { folderName } }),
   selectDirectory: async () => {
+    const isLocal = api.getConnectionMode() === 'local';
+    if (isLocal) {
+      try {
+        const res = await request('/files/select-directory', { method: 'POST' })
+        if (res && res.success && res.path) {
+          return res
+        }
+      } catch (err) {
+        console.warn('Native selectDirectory failed, trying browser picker:', err)
+      }
+    }
+
     // Try browser-native File System Access API first (Chrome/Edge/Opera)
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {

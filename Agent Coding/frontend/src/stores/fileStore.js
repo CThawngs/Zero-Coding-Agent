@@ -104,7 +104,8 @@ const useFileStore = create(
 
         try {
           set({ isLoading: true })
-          const content = await api.readFile(path)
+          const res = await api.readFile(path)
+          const content = typeof res === 'object' && res !== null ? (res.content ?? '') : (res ?? '')
           const language = getLanguage(path)
           const fileEntry = { path, content, language, modified: false }
 
