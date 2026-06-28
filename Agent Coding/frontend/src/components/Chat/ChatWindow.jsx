@@ -180,8 +180,15 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
 
                 <button 
                   className="btn btn-primary" 
-                  onClick={() => {
-                    useFileStore.getState().openFolderPicker()
+                  onClick={async () => {
+                    try {
+                      const res = await api.selectDirectory()
+                      if (res && res.success && res.path) {
+                        useFileStore.getState().setWorkspace(res.path)
+                      }
+                    } catch (err) {
+                      console.error("Failed to select workspace folder:", err)
+                    }
                   }}
                   style={{ padding: '12px 24px', fontSize: '14px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)' }}
                 >
@@ -260,8 +267,15 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
           {/* Change workspace button */}
           <button
             className="icon-btn"
-            onClick={() => {
-              useFileStore.getState().openFolderPicker()
+            onClick={async () => {
+              try {
+                const res = await api.selectDirectory()
+                if (res && res.success && res.path) {
+                  setWorkspace(res.path)
+                }
+              } catch (err) {
+                console.error("Failed to select workspace folder:", err)
+              }
             }}
             title={language === 'vi' ? 'Đổi workspace' : 'Change workspace'}
             style={{ marginRight: '4px' }}

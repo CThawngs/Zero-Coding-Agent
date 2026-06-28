@@ -127,35 +127,6 @@ export const api = {
   getDrives: () =>
     request('/files/drives'),
   selectDirectory: async () => {
-    // In local mode, ask the user to enter/paste the absolute path via a prompt
-    const isLocal = api.getConnectionMode() === 'local';
-    if (isLocal) {
-      let defaultVal = '';
-      try {
-        const stored = localStorage.getItem('antigravity-filestore');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed && parsed.state && parsed.state.workspace) {
-            defaultVal = parsed.state.workspace;
-          }
-        }
-      } catch (e) {}
-
-      const msg = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-        ? "Enter absolute path to workspace folder:"
-        : "Nhập đường dẫn tuyệt đối đến thư mục làm việc của bạn (Ví dụ: C:\\Users\\nguye\\Projects\\my-project):";
-      
-      const path = window.prompt(msg, defaultVal);
-      if (path === null) {
-        return { success: false, message: 'Selection cancelled' };
-      }
-      const trimmed = path.trim();
-      if (!trimmed) {
-        return { success: false, message: 'Empty path' };
-      }
-      return { success: true, path: trimmed };
-    }
-
     // Try browser-native File System Access API first (Chrome/Edge/Opera)
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {

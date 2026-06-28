@@ -285,22 +285,45 @@ router.post('/select-directory', async (req, res) => {
     let selectedPath = null;
     
     if (isWin) {
-      // PowerShell script to open FolderBrowserDialog
-      const psScript = `
-        Add-Type -AssemblyName System.Windows.Forms;
-        $f = New-Object System.Windows.Forms.FolderBrowserDialog;
-        $f.Description = "Select Workspace Folder for Zero Coding Agent";
-        $f.ShowNewFolderButton = $true;
-        $result = $f.ShowDialog();
-        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-          $f.SelectedPath
-        }
-      `;
-      const { stdout, stderr } = await execAsync(`powershell -NoProfile -STA -Command "${psScript.replace(/\n/g, ' ')}"`);
-      if (stderr) {
-        console.error("[SelectDirectory] PowerShell stderr:", stderr);
+      const fs = await import('fs');
+      const os = await import('os');
+      const path = await import('path');
+      
+      const tempScriptPath = path.join(os.tmpdir(), `select_folder_${Date.now()}.ps1`);
+      const tempResultPath = path.join(os.tmpdir(), `selected_folder_${Date.now()}.txt`);
+      
+      if (fs.existsSync(tempResultPath)) {
+        try { fs.unlinkSync(tempResultPath); } catch {}
       }
-      selectedPath = stdout.trim();
+
+      const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.FolderBrowserDialog
+$f.Description = "Select Workspace Folder for Zero Coding Agent"
+$f.ShowNewFolderButton = $true
+$result = $f.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+    [System.IO.File]::WriteAllText("${tempResultPath.replace(/\\/g, '\\\\')}", $f.SelectedPath)
+} else {
+    [System.IO.File]::WriteAllText("${tempResultPath.replace(/\\/g, '\\\\')}", "CANCELLED")
+}
+`;
+      fs.writeFileSync(tempScriptPath, psScript, 'utf8');
+
+      try {
+        const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${tempScriptPath}\\"' -WindowStyle Normal -Wait"`;
+        await execAsync(cmd);
+        
+        if (fs.existsSync(tempResultPath)) {
+          const content = fs.readFileSync(tempResultPath, 'utf8').trim();
+          if (content && content !== 'CANCELLED') {
+            selectedPath = content;
+          }
+        }
+      } finally {
+        try { if (fs.existsSync(tempScriptPath)) fs.unlinkSync(tempScriptPath); } catch {}
+        try { if (fs.existsSync(tempResultPath)) fs.unlinkSync(tempResultPath); } catch {}
+      }
     } else if (isMac) {
       const appleScript = `osascript -e 'POSIX path of (choose folder with prompt "Select Workspace Folder for Zero Coding Agent")'`;
       const { stdout } = await execAsync(appleScript);
@@ -311,7 +334,6 @@ router.post('/select-directory', async (req, res) => {
         const { stdout } = await execAsync('zenity --file-selection --directory --title="Select Workspace Folder for Zero Coding Agent"');
         selectedPath = stdout.trim();
       } catch {
-        // zenity not available (Cloud Run), use name from body
         selectedPath = null;
       }
     }
@@ -319,8 +341,7 @@ router.post('/select-directory', async (req, res) => {
     if (selectedPath) {
       res.json({ success: true, path: selectedPath });
     } else {
-      // Fallback: use folder name from request body as virtual workspace
-      res.json({ success: true, path: `./workspace/${req.body.name || 'project'}` });
+      res.json({ success: false, message: 'Selection cancelled' });
     }
   } catch (err) {
     console.error("[SelectDirectory] Error:", err.message);
@@ -334,31 +355,96 @@ router.post('/resolve-directory', async (req, res) => {
     const { name } = req.body;
     if (!name) return res.json({ path: null });
 
-    // On Windows, try to find a matching open Explorer folder or recent path
-    if (process.platform === 'win32') {
-      const psScript = `
-        Add-Type -AssemblyName System.Windows.Forms;
-        $f = New-Object System.Windows.Forms.FolderBrowserDialog;
-        $f.Description = "Select '${name}' workspace folder";
-        $f.SelectedPath = "";
-        $f.ShowNewFolderButton = $false;
-        $result = $f.ShowDialog();
-        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-          $f.SelectedPath
+    const { promises: fsPromises, existsSync } = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+
+    let resolvedPath = null;
+
+    // 1. Check parent directories of process.cwd() (up to 6 levels)
+    let current = process.cwd();
+    for (let i = 0; i < 6; i++) {
+      const checkPath = path.join(current, name);
+      if (existsSync(checkPath)) {
+        const stats = await fsPromises.stat(checkPath);
+        if (stats.isDirectory()) {
+          resolvedPath = checkPath;
+          break;
         }
-      `;
-      const { stdout } = await execAsync(
-        `powershell -NoProfile -STA -Command "${psScript.replace(/\n/g, ' ')}"`
-      );
-      const selectedPath = stdout.trim();
-      if (selectedPath) {
-        return res.json({ path: selectedPath });
+      }
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+
+    // 2. Check sibling directories at each level of the parents
+    if (!resolvedPath) {
+      current = process.cwd();
+      for (let i = 0; i < 6; i++) {
+        const parent = path.dirname(current);
+        if (parent === current) break;
+
+        const checkPath = path.join(parent, name);
+        if (existsSync(checkPath)) {
+          const stats = await fsPromises.stat(checkPath);
+          if (stats.isDirectory()) {
+            resolvedPath = checkPath;
+            break;
+          }
+        }
+        
+        // Also check subdirectories (siblings) of parent
+        try {
+          const siblings = await fsPromises.readdir(parent, { withFileTypes: true });
+          for (const sibling of siblings) {
+            if (sibling.isDirectory()) {
+              const subPath = path.join(parent, sibling.name, name);
+              if (existsSync(subPath)) {
+                resolvedPath = subPath;
+                break;
+              }
+            }
+          }
+        } catch {}
+        
+        if (resolvedPath) break;
+        current = parent;
       }
     }
 
-    // Fallback on any platform: just return the name as workspace identifier
+    // 3. Check inside home directory and common workspace directories
+    if (!resolvedPath) {
+      const home = os.homedir();
+      const searchDirs = [
+        home,
+        path.join(home, 'Documents'),
+        path.join(home, 'Desktop'),
+        path.join(home, 'OneDrive'),
+        path.join(home, 'OneDrive/Documents'),
+        path.join(home, 'OneDrive/Documents/Projects'),
+      ];
+
+      for (const sDir of searchDirs) {
+        const checkPath = path.join(sDir, name);
+        if (existsSync(checkPath)) {
+          try {
+            const stats = await fsPromises.stat(checkPath);
+            if (stats.isDirectory()) {
+              resolvedPath = checkPath;
+              break;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    if (resolvedPath) {
+      return res.json({ path: resolvedPath });
+    }
+    
     res.json({ path: null });
-  } catch {
+  } catch (err) {
+    console.error("[ResolveDirectory] Error:", err.message);
     res.json({ path: null });
   }
 });
