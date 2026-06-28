@@ -689,6 +689,8 @@ router.post('/conversations', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
 // ─── GET /conversations/:id ──────────────────────────────────────────────────
 // Returns a conversation with paginated messages (newest first)
 router.get('/conversations/:id', async (req, res) => {
