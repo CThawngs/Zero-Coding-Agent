@@ -278,6 +278,19 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
           result: taskResult || 'Task is still running in the background.'
         };
       }
+      case 'ask_user': {
+        // Pause agent loop and ask user for input
+        const { question, options = [], allowCustom = true } = params;
+        return {
+          success: true,
+          pending: true,
+          type: 'ask_user',
+          question,
+          options,
+          allowCustom,
+          message: question,
+        };
+      }
       default:
         return { success: false, error: `Unknown tool: ${tool}` };
     }
@@ -345,7 +358,16 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
         const result = await executeToolCall(tc, null, permissionMode, conversationId);
         toolCallResults.push({ id: tcId, tool: tc.tool, params: tc.params, result });
 
-        if (!result.pending) {
+        if (result.type === 'ask_user') {
+          // Pause agent loop and ask user for input
+          yield { type: 'tool_call', id: tcId, tool: tc.tool, params: tc.params };
+          yield { type: 'ask_user', question: result.question, options: result.options, allowCustom: result.allowCustom };
+          yield { type: 'activity', message: `❓ Asking user: ${result.question}`, iteration: iterationCount };
+          yield { type: 'agent_paused', message: result.question, askUser: true };
+          finalResponseText += responseText;
+          yield { type: 'done', content: responseText || finalResponseText, toolCalls: [...allToolCallResults, ...toolCallResults], paused: true, askUser: true };
+          return;
+        } else if (!result.pending) {
           yield { type: 'tool_call', id: tcId, tool: tc.tool, params: tc.params, result };
           yield { type: 'tool_result', id: tcId, result };
           yield { type: 'activity', message: `✅ ${tc.tool.replace(/_/g, ' ')} completed`, iteration: iterationCount };

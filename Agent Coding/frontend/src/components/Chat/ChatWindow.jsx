@@ -11,7 +11,9 @@ import ChatInput from './ChatInput'
 import ModelSelector from '../ModelSelector'
 import TerminalApproval from './TerminalApproval'
 import PermissionModal from './PermissionModal'
+import AskUserPanel from './AskUserPanel'
 import './ChatWindow.css'
+import './AskUserPanel.css'
 
 export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarOpen, explorerOpen }) {
   const messagesEndRef = useRef(null)
@@ -346,6 +348,9 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Ask User Panel — shown when AI needs user input */}
+      <AskUserPanel />
 
       {/* Pending approvals */}
       {activeApprovals.length > 0 && (

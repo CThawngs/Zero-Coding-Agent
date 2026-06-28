@@ -50,6 +50,7 @@ const useChatStore = create((set, get) => ({
   streamingMessageId: null,
   pendingApprovals: [],
   activityLog: [],
+  askUserQuestion: null,       // { question, options, allowCustom }
   error: null,
   activeStreams: {},
   // Agent loop state
@@ -489,6 +490,14 @@ const useChatStore = create((set, get) => ({
             }
           })
         },
+        // onAskUser
+        (question, options, allowCustom) => {
+          set(state => ({
+            askUserQuestion: { question, options, allowCustom, conversationId: convId },
+            isAgentWorking: true,
+            agentStatus: '❓ Waiting for your input...',
+          }))
+        },
         // onDone
         (finalContent, toolCalls, extra) => {
           const currentStream = get().activeStreams[convId] || {}
@@ -723,6 +732,30 @@ const useChatStore = create((set, get) => ({
       console.error('Reject failed:', err)
     }
     get().removePendingApproval(commandId)
+  },
+
+  // Respond to ask_user question — resume agent loop
+  respondToAskUser: async (response) => {
+    const { askUserQuestion } = get()
+    if (!askUserQuestion) return
+
+    const { conversationId, question } = askUserQuestion
+    set({ askUserQuestion: null, isAgentWorking: true, agentStatus: 'Processing your response...' })
+
+    // Send user's response back to the agent to continue
+    const { activeProvider, activeModel } = useProviderStore.getState()
+    const language = useSettingsStore.getState().language
+
+    const contextMsg = language === 'vi'
+      ? `Người dùng đã trả lời câu hỏi "${question}" với: "${response}". Hãy tiếp tục công việc dựa trên câu trả lời này.`
+      : `The user answered the question "${question}" with: "${response}". Continue the task based on this answer.`
+
+    get().streamMessage(contextMsg, [], activeProvider, activeModel)
+  },
+
+  // Cancel ask_user
+  cancelAskUser: () => {
+    set({ askUserQuestion: null, isAgentWorking: false, agentStatus: '' })
   },
 
   // Add pending approval
