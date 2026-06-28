@@ -39,20 +39,19 @@ export default function Sidebar({ onSettings }) {
       const connMode = api.getConnectionMode()
       if (connMode === 'cloud') {
         useFileStore.getState().setWorkspace('./workspace/project-1')
-        await createConversation('New Chat')
-        return
-      }
-
-      try {
-        const res = await api.selectDirectory()
-        if (res && res.success && res.path) {
-          useFileStore.getState().setWorkspace(res.path)
-          await createConversation('New Chat')
+      } else {
+        try {
+          const res = await api.getDefaultWorkspace()
+          if (res && res.success && res.path) {
+            useFileStore.getState().setWorkspace(res.path)
+          } else {
+            useFileStore.getState().setWorkspace('./')
+          }
+        } catch (err) {
+          console.error("Failed to get default workspace:", err)
+          useFileStore.getState().setWorkspace('./')
         }
-      } catch (err) {
-        console.error("Failed to select workspace folder:", err)
       }
-      return
     }
     await createConversation('New Chat')
   }

@@ -126,19 +126,34 @@ export const api = {
     request(`/files/list?path=${encodeURIComponent(dirPath)}`),
   getDrives: () =>
     request('/files/drives'),
-  resolveFolder: (folderName) =>
-    request('/files/resolve-folder', { method: 'POST', body: { folderName } }),
   selectDirectory: async () => {
+    // In local mode, ask the user to enter/paste the absolute path via a prompt
     const isLocal = api.getConnectionMode() === 'local';
     if (isLocal) {
+      let defaultVal = '';
       try {
-        const res = await request('/files/select-directory', { method: 'POST' })
-        if (res && res.success && res.path) {
-          return res
+        const stored = localStorage.getItem('antigravity-filestore');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.state && parsed.state.workspace) {
+            defaultVal = parsed.state.workspace;
+          }
         }
-      } catch (err) {
-        console.warn('Native selectDirectory failed, trying browser picker:', err)
+      } catch (e) {}
+
+      const msg = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+        ? "Enter absolute path to workspace folder:"
+        : "Nhập đường dẫn tuyệt đối đến thư mục làm việc của bạn (Ví dụ: C:\\Users\\nguye\\Projects\\my-project):";
+      
+      const path = window.prompt(msg, defaultVal);
+      if (path === null) {
+        return { success: false, message: 'Selection cancelled' };
       }
+      const trimmed = path.trim();
+      if (!trimmed) {
+        return { success: false, message: 'Empty path' };
+      }
+      return { success: true, path: trimmed };
     }
 
     // Try browser-native File System Access API first (Chrome/Edge/Opera)
@@ -170,6 +185,8 @@ export const api = {
     // Fallback: server-side directory picker (PowerShell on local backend)
     return request('/files/select-directory', { method: 'POST' })
   },
+  getDefaultWorkspace: () =>
+    request('/files/default-workspace'),
   downloadWorkspace: (workspacePath) => {
     return `${BASE_URL}/files/download?path=${encodeURIComponent(workspacePath)}`;
   },

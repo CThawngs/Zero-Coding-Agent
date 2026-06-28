@@ -32,41 +32,14 @@ export default function FileExplorer() {
       return
     }
 
-    // Local mode: Try server-side folder picker first
     try {
       const res = await api.selectDirectory()
       if (res && res.success && res.path) {
         setWorkspace(res.path)
-        return
       }
     } catch (err) {
-      console.warn('Server-side folder picker failed:', err)
+      console.error('Failed to select directory:', err)
     }
-
-    // Try browser-native directory picker fallback
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      try {
-        const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
-        window.__workspaceHandle = handle
-        // Try resolve full path via backend
-        try {
-          const dirPath = await api.resolveFolder(handle.name)
-          if (dirPath && dirPath.path) {
-            setWorkspace(dirPath.path)
-            return
-          }
-        } catch { /* fallback */ }
-        setWorkspace(`./workspace/${handle.name}`)
-        return
-      } catch (err) {
-        if (err.name === 'AbortError') return
-        // Picker failed (e.g. insecure context) — fall through to input
-      }
-    }
-
-    // Final fallback: show inline path input
-    setShowPathInput(true)
-    setPathInput(workspace || '')
   }
 
   const handlePathSubmit = () => {
