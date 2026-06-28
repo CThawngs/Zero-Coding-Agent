@@ -167,6 +167,51 @@ router.get('/:id/models', async (req, res) => {
   }
 });
 
+// ─── POST /api/providers/:id/validate-model ──────────────────────────────────
+router.post('/:id/validate-model', async (req, res) => {
+  const { id } = req.params;
+  const { modelId, apiKey, baseUrl } = req.body;
+  const provider = PROVIDERS[id];
+  if (!provider) return res.status(404).json({ error: 'Provider not found' });
+  if (!modelId) return res.status(400).json({ error: 'modelId is required' });
+
+  try {
+    // Static providers (google, openai, anthropic) — check against known model list
+    if (['google', 'openai', 'anthropic'].includes(id)) {
+      const models = provider.models || [];
+      const found = models.find(m => m.id === modelId);
+      if (found) {
+        return res.json({ valid: true, model: found });
+      }
+      // Also check if it's a known model ID pattern (e.g. gemini-2.5-flash)
+      const partialMatch = models.find(m => m.id.startsWith(modelId) || modelId.startsWith(m.id));
+      if (partialMatch) {
+        return res.json({ valid: false, error: `Model "${modelId}" not found. Did you mean "${partialMatch.id}"?`, suggestion: partialMatch.id });
+      }
+      const availableIds = models.map(m => m.id);
+      return res.json({ valid: false, error: `Model "${modelId}" does not exist in ${provider.name}. Available: ${availableIds.join(', ')}`, available: availableIds });
+    }
+
+    // Dynamic providers — try to discover models
+    const key = apiKey || process.env[provider.envKey];
+    const baseURL = baseUrl || provider.baseUrl;
+    const dynamic = await discoverModels(id, key, baseURL);
+    const found = dynamic.find(m => m.id === modelId);
+    if (found) {
+      return res.json({ valid: true, model: found });
+    }
+    // For dynamic providers, accept any model name (can't fully validate)
+    if (dynamic.length === 0 && key) {
+      // Has key but couldn't discover — accept optimistically
+      return res.json({ valid: true, model: { id: modelId, name: modelId }, note: 'Could not verify — accepted optimistically' });
+    }
+    const availableIds = dynamic.map(m => m.id);
+    return res.json({ valid: false, error: `Model "${modelId}" not found in ${provider.name}.`, available: availableIds.slice(0, 20) });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
 // ─── POST /api/providers/:id/test ─────────────────────────────────────────────
 router.post('/:id/test', async (req, res) => {
   const { id } = req.params;

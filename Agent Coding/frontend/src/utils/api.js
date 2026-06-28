@@ -95,6 +95,8 @@ export const api = {
   getProviders: () => request('/providers'),
   verifyProvider: (provider, apiKey) =>
     request(`/providers/${provider}/test`, { method: 'POST', body: { apiKey } }),
+  validateModel: (provider, modelId, apiKey) =>
+    request(`/providers/${provider}/validate-model`, { method: 'POST', body: { modelId, apiKey } }),
   getModels: (provider) => request(`/providers/${provider}/models`),
   saveApiKey: (provider, apiKey) =>
     request('/config/apikey', { method: 'POST', body: { provider, key: apiKey } }),

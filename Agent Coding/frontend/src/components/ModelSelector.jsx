@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Plus, Check, X } from 'lucide-react'
+import { ChevronDown, Plus, Check, X, Lock } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../stores/providerStore'
 import { useTranslation } from '../utils/translations'
 import './ModelSelector.css'
@@ -27,7 +27,7 @@ export default function ModelSelector() {
   const {
     activeProvider, activeModel, providers,
     selectProvider, selectModel, getModelsForProvider,
-    addCustomModel,
+    addCustomModel, modelErrors, clearModelError,
     showFreeOnly, toggleFreeFilter, isModelFree
   } = useProviderStore()
 
@@ -71,14 +71,20 @@ export default function ModelSelector() {
     return p.connected || (p.apiKey && p.apiKey.length > 5)
   }
 
-  const handleAddModelInline = (pid) => {
+  const handleAddModelInline = async (pid) => {
     const modelName = (newModelInputs[pid] || '').trim()
     if (!modelName) return
-    addCustomModel(pid, modelName)
-    selectProvider(pid)
-    selectModel(modelName)
-    setNewModelInputs(prev => ({ ...prev, [pid]: '' }))
-    setOpen(false)
+
+    clearModelError(pid)
+    const result = await addCustomModel(pid, modelName)
+
+    if (result.success) {
+      selectProvider(pid)
+      selectModel(modelName)
+      setNewModelInputs(prev => ({ ...prev, [pid]: '' }))
+      setOpen(false)
+    }
+    // Error is stored in modelErrors[pid] and displayed in UI
   }
 
   return (
@@ -112,6 +118,8 @@ export default function ModelSelector() {
               const connected = isProviderConnected(pid)
               const isDynamic = DYNAMIC_MODEL_PROVIDERS.includes(pid)
               const showAddModel = connected && (isDynamic || models.length === 0)
+              const needsKey = ['google', 'openai', 'anthropic', 'openrouter', '9router', 'custom'].includes(pid)
+              const isLocked = needsKey && !providers[pid]?.apiKey
 
               return (
                 <div key={pid} className="provider-group">
@@ -136,8 +144,10 @@ export default function ModelSelector() {
                         selectModel(m.id)
                         setOpen(false)
                       }}
+                      disabled={!connected}
                     >
                       <div className="model-item-main">
+                        {!connected && <Lock size={10} style={{ marginRight: '4px', opacity: 0.5 }} />}
                         <span className="model-item-name">{m.name || m.id}</span>
                         {m.free && <span className="model-free-badge">Free</span>}
                         {m.size && <span className="model-size">{m.size}</span>}
@@ -164,7 +174,10 @@ export default function ModelSelector() {
                         className="settings-input"
                         placeholder={t('addModelPlaceholder') || 'Type model name (e.g. gpt-4o)'}
                         value={newModelInputs[pid] || ''}
-                        onChange={e => setNewModelInputs(prev => ({ ...prev, [pid]: e.target.value }))}
+                        onChange={e => {
+                          setNewModelInputs(prev => ({ ...prev, [pid]: e.target.value }))
+                          if (modelErrors[pid]) clearModelError(pid)
+                        }}
                         onKeyDown={e => {
                           if (e.key === 'Enter') handleAddModelInline(pid)
                           if (e.key === 'Escape') setNewModelInputs(prev => ({ ...prev, [pid]: '' }))
@@ -184,13 +197,28 @@ export default function ModelSelector() {
                     </div>
                   )}
 
+                  {/* Validation error */}
+                  {modelErrors[pid] && (
+                    <div className="model-validation-error" style={{
+                      fontSize: '10px', color: '#ef4444', padding: '2px 12px 4px',
+                      lineHeight: '1.3'
+                    }}>
+                      ⚠ {modelErrors[pid]}
+                    </div>
+                  )}
+
                   {/* No models message for non-dynamic providers */}
                   {models.length === 0 && !showAddModel && !connected && (
                     <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
                       <div>{t('noApiKeyConfigured') || 'API key not configured'}</div>
                     </div>
                   )}
-                  {models.length === 0 && !showAddModel && connected && (
+                  {models.length === 0 && !showAddModel && connected && isLocked && (
+                    <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
+                      <div>🔒 Add API key to unlock models</div>
+                    </div>
+                  )}
+                  {models.length === 0 && !showAddModel && connected && !isLocked && (
                     <div className="no-models" style={{fontSize: '11px', lineHeight: '1.3'}}>
                       <div>{t('noModelsInSettings') || 'Add model in Settings'}</div>
                     </div>

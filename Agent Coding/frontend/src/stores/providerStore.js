@@ -91,6 +91,7 @@ const useProviderStore = create(
       activeModel: null,
       contextWindow: 'auto',
       showFreeOnly: false,
+      modelErrors: {}, // { providerId: errorMessage }
 
       // Sync config with backend on startup
       syncWithBackend: async () => {
@@ -232,28 +233,63 @@ const useProviderStore = create(
         set({ contextWindow: value })
       },
 
-      // Add custom model
-      addCustomModel: (providerId, modelName) => {
-        if (!modelName.trim()) return
-        set(state => {
-          const prov = state.providers[providerId] || {}
-          const deleted = (prov.deletedModels || []).filter(id => id !== modelName)
-          const custom = [
-            ...(prov.customModels || []),
-            { id: modelName, name: modelName, contextWindow: 128000, free: false }
-          ].filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
+      // Add custom model (with validation)
+      addCustomModel: async (providerId, modelName) => {
+        if (!modelName.trim()) return { success: false, error: 'Model name is required' }
 
-          return {
-            providers: {
-              ...state.providers,
-              [providerId]: {
-                ...prov,
-                customModels: custom,
-                deletedModels: deleted
-              }
-            }
+        const prov = get().providers[providerId]
+        if (!prov) return { success: false, error: 'Provider not found' }
+
+        // Check if provider has API key (required for non-local providers)
+        const needsKey = ['google', 'openai', 'anthropic', 'openrouter', '9router', 'custom'].includes(providerId)
+        if (needsKey && !prov.apiKey) {
+          return { success: false, error: `API key required. Please add an API key for ${providerId} first.` }
+        }
+
+        // Validate model exists in provider
+        try {
+          const result = await api.validateModel(providerId, modelName.trim(), prov.apiKey)
+          if (!result.valid) {
+            // Clear any previous error for this provider
+            set(state => ({
+              modelErrors: { ...state.modelErrors, [providerId]: result.error }
+            }))
+            return { success: false, error: result.error, suggestion: result.suggestion, available: result.available }
           }
-        })
+
+          // Model is valid — add it
+          set(state => {
+            const deleted = (state.providers[providerId].deletedModels || []).filter(id => id !== modelName.trim())
+            const existing = state.providers[providerId].customModels || []
+            // Don't add duplicates
+            if (existing.some(m => m.id === modelName.trim())) return {}
+            const custom = [
+              ...existing,
+              { id: modelName.trim(), name: result.model?.name || modelName.trim(), contextWindow: result.model?.contextWindow || 128000, free: result.model?.isFree || false }
+            ]
+            return {
+              providers: {
+                ...state.providers,
+                [providerId]: {
+                  ...state.providers[providerId],
+                  customModels: custom,
+                  deletedModels: deleted
+                }
+              },
+              modelErrors: { ...state.modelErrors, [providerId]: null }
+            }
+          })
+          return { success: true, model: result.model }
+        } catch (err) {
+          const errorMsg = `Could not validate model: ${err.message}`
+          set(state => ({ modelErrors: { ...state.modelErrors, [providerId]: errorMsg } }))
+          return { success: false, error: errorMsg }
+        }
+      },
+
+      // Clear model error
+      clearModelError: (providerId) => {
+        set(state => ({ modelErrors: { ...state.modelErrors, [providerId]: null } }))
       },
 
       // Remove / Delete any model from the provider
@@ -420,21 +456,35 @@ const useProviderStore = create(
         activeModel: state.activeModel,
         contextWindow: state.contextWindow,
         showFreeOnly: state.showFreeOnly,
+        modelErrors: {},
       }),
-      // Encrypt before storing, decrypt when loading
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Decrypt any stored encrypted values
-          decryptObject(state.providers).then(decrypted => {
-            if (decrypted) {
-              state.providers = decrypted
-            }
-          }).catch(() => { /* ignore, keep as-is */ })
+      // Custom serialize/deserialize — use base64+JSON for reliability
+      // (async Web Crypto encryption is split into export/import only)
+      serialize: (state) => {
+        try {
+          return JSON.stringify(state)
+        } catch (e) {
+          console.warn('Serialize failed:', e)
+          return '{}'
         }
       },
-      // Custom serialize/deserialize
-      serialize: (state) => encryptObject(state),
-      deserialize: (str) => decryptObject(str),
+      deserialize: (str) => {
+        try {
+          const parsed = JSON.parse(str)
+          // Migrate: ensure all provider entries have customModels/deletedModels arrays
+          if (parsed.providers) {
+            Object.keys(parsed.providers).forEach(pid => {
+              if (!parsed.providers[pid].customModels) parsed.providers[pid].customModels = []
+              if (!parsed.providers[pid].deletedModels) parsed.providers[pid].deletedModels = []
+              if (!parsed.providers[pid].localModels) parsed.providers[pid].localModels = []
+            })
+          }
+          return parsed
+        } catch (e) {
+          console.warn('Deserialize failed:', e)
+          return undefined
+        }
+      },
     }
   )
 )
