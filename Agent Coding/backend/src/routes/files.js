@@ -498,3 +498,36 @@ router.get('/download', async (req, res) => {
 });
 
 export default router;
+
+// ─── GET /api/files/browse-dirs?path=X ─────────────────────────────────────────
+// Returns list of directories for in-app folder browser (Cloud Run / Linux)
+router.get('/browse-dirs', async (req, res) => {
+  try {
+    const { path: dirPath = process.cwd() } = req.query;
+    const path = await import('path');
+    const { promises: fsPromises } = await import('fs');
+
+    const absPath = path.resolve(dirPath);
+    let entries;
+    try {
+      entries = await fsPromises.readdir(absPath, { withFileTypes: true });
+    } catch {
+      // If cannot read, return empty
+      return res.json({ path: absPath, directories: [], error: 'cannot_read' });
+    }
+
+    const directories = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+      .map(e => ({ name: e.name, path: path.join(absPath, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Also get parent path
+    const parent = path.dirname(absPath);
+    const hasParent = parent !== absPath;
+
+    res.json({ path: absPath, directories, parent: hasParent ? parent : null });
+  } catch (err) {
+    console.error('[BrowseDirs] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});

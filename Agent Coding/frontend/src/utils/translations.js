@@ -106,6 +106,11 @@ export const translations = {
     refreshBtn: 'Làm mới',
     addModelPlaceholder: 'Nhập tên model (VD: gpt-4o)',
     searchModel: 'Tìm model...',
+    workspaceBrowser: 'Duyệt thư mục Workspace',
+    selectFolder: 'Chọn thư mục',
+    cancel: 'Hủy',
+    cannotReadFolder: 'Không thể đọc thư mục này (quyền bị từ chối)',
+    emptyFolder: 'Thư mục trống',
   },
   en: {
     // General
@@ -214,6 +219,11 @@ export const translations = {
     refreshBtn: 'Refresh',
     addModelPlaceholder: 'Type model name (e.g. gpt-4o)',
     searchModel: 'Search model...',
+    workspaceBrowser: 'Browse Workspace Folder',
+    selectFolder: 'Select Folder',
+    cancel: 'Cancel',
+    cannotReadFolder: 'Cannot read this folder (permission denied)',
+    emptyFolder: 'Empty folder',
   }
 }
 

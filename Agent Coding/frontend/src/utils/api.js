@@ -166,6 +166,11 @@ export const api = {
   downloadWorkspace: (workspacePath) => {
     return `${BASE_URL}/files/download?path=${encodeURIComponent(workspacePath)}`;
   },
+  // --- Folder Browser (in-app, for Cloud Run / Linux) ---
+  browseDirs: (dirPath) => {
+    const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+    return request(`/files/browse-dirs${q}`);
+  },
 
   // --- Terminal Approval ---
   approveCommand: (commandId) =>
