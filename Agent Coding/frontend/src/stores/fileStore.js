@@ -15,11 +15,61 @@ const useFileStore = create(
       modifiedFiles: {}, // {path: newContent}
       isLoading: false,
       error: null,
+      _ws: null,
 
       // Set workspace
       setWorkspace: async (path) => {
         set({ workspace: path, isLoading: true })
         await get().refreshTree()
+        get().setupFileWatcher()
+      },
+
+      // Setup WebSocket File Watcher
+      setupFileWatcher: () => {
+        const { workspace, _ws } = get()
+        if (_ws) {
+          try {
+            _ws.close()
+          } catch (e) {}
+          set({ _ws: null })
+        }
+        if (!workspace) return
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const host = window.location.hostname || 'localhost'
+        const wsUrl = `${protocol}//${host}:3747`
+
+        try {
+          const ws = new WebSocket(wsUrl)
+          
+          ws.onopen = () => {
+            console.log('[Watcher] WebSocket connected for path:', workspace)
+            ws.send(JSON.stringify({ type: 'watch', path: workspace }))
+          }
+
+          ws.onmessage = (e) => {
+            try {
+              const msg = JSON.parse(e.data)
+              if (msg.type === 'file_change') {
+                get().refreshTree()
+              }
+            } catch (err) {
+              console.error('[Watcher] WS parse error:', err)
+            }
+          }
+
+          ws.onclose = () => {
+            set({ _ws: null })
+          }
+
+          ws.onerror = (err) => {
+            console.error('[Watcher] WebSocket error:', err)
+          }
+
+          set({ _ws: ws })
+        } catch (err) {
+          console.error('[Watcher] Failed to create WebSocket:', err)
+        }
       },
 
       // Refresh file tree
@@ -227,13 +277,20 @@ const useFileStore = create(
 
       // Clear workspace
       clearWorkspace: () => {
+        const { _ws } = get()
+        if (_ws) {
+          try {
+            _ws.close()
+          } catch (e) {}
+        }
         set({
           workspace: null,
           fileTree: null,
           activeFilePath: null,
           openFile: null,
           openFiles: [],
-          modifiedFiles: {}
+          modifiedFiles: {},
+          _ws: null
         })
       }
     }),
@@ -249,6 +306,7 @@ const useFileStore = create(
           // Defer refresh to next tick so store is fully initialized
           setTimeout(() => {
             state.refreshTree()
+            state.setupFileWatcher()
           }, 100)
         }
       }
