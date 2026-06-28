@@ -39,9 +39,13 @@ const useFileStore = create(
         }
         if (!workspace) return
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const host = window.location.hostname || 'localhost'
-        const wsUrl = `${protocol}//${host}:3747`
+        let wsUrl = ''
+        if (api.getConnectionMode() === 'local') {
+          wsUrl = 'ws://localhost:3747'
+        } else {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+          wsUrl = `${protocol}//${window.location.host}`
+        }
 
         try {
           const ws = new WebSocket(wsUrl)
@@ -56,6 +60,16 @@ const useFileStore = create(
               const msg = JSON.parse(e.data)
               if (msg.type === 'file_change') {
                 get().refreshTree()
+                
+                // Realtime reload file content if it is modified externally
+                const { activeFilePath, modifiedFiles } = get()
+                if (activeFilePath && msg.path && msg.event === 'change') {
+                  const normMsgPath = msg.path.replace(/\\/g, '/').toLowerCase()
+                  const normActivePath = activeFilePath.replace(/\\/g, '/').toLowerCase()
+                  if (normMsgPath === normActivePath && !modifiedFiles[activeFilePath]) {
+                    get().reloadActiveFile()
+                  }
+                }
               }
             } catch (err) {
               console.error('[Watcher] WS parse error:', err)
@@ -73,6 +87,35 @@ const useFileStore = create(
           set({ _ws: ws })
         } catch (err) {
           console.error('[Watcher] Failed to create WebSocket:', err)
+        }
+      },
+
+      reloadActiveFile: async () => {
+        const { activeFilePath } = get()
+        if (!activeFilePath) return
+        try {
+          const res = await api.readFile(activeFilePath)
+          const content = typeof res === 'object' && res !== null ? (res.content ?? '') : (res ?? '')
+          set(state => {
+            const updatedOpenFiles = state.openFiles.map(f => {
+              if (f.path === activeFilePath) {
+                return { ...f, content, modified: false }
+              }
+              return f
+            })
+            const activeOpen = updatedOpenFiles.find(f => f.path === activeFilePath)
+            
+            const newModified = { ...state.modifiedFiles }
+            delete newModified[activeFilePath]
+
+            return {
+              openFiles: updatedOpenFiles,
+              openFile: activeOpen || state.openFile,
+              modifiedFiles: newModified
+            }
+          })
+        } catch (err) {
+          console.error('Failed to reload active file:', err)
         }
       },
 
