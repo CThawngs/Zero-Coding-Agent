@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api } from '../utils/api'
+import { encryptObject, decryptObject } from '../utils/crypto'
 
 export const PROVIDER_MODELS = {
   google: {
@@ -418,7 +419,21 @@ const useProviderStore = create(
         activeModel: state.activeModel,
         contextWindow: state.contextWindow,
         showFreeOnly: state.showFreeOnly,
-      })
+      }),
+      // Encrypt before storing, decrypt when loading
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Decrypt any stored encrypted values
+          decryptObject(state.providers).then(decrypted => {
+            if (decrypted) {
+              state.providers = decrypted
+            }
+          }).catch(() => { /* ignore, keep as-is */ })
+        }
+      },
+      // Custom serialize/deserialize
+      serialize: (state) => encryptObject(state),
+      deserialize: (str) => decryptObject(str),
     }
   )
 )

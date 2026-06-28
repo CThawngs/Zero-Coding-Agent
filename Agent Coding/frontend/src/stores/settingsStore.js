@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { encryptObject, decryptObject } from '../utils/crypto'
 
 const useSettingsStore = create(
   persist(
@@ -21,6 +22,8 @@ const useSettingsStore = create(
     }),
     {
       name: 'antigravity-settings',
+      serialize: (state) => encryptObject(state),
+      deserialize: (str) => decryptObject(str),
     }
   )
 )

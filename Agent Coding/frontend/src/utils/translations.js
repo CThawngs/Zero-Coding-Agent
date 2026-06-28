@@ -46,6 +46,11 @@ export const translations = {
     tabGithub: 'GitHub',
     tabAppearance: 'Giao diện',
     tabAbout: 'Giới thiệu',
+    exportSettings: 'Xuất Cài Đặt',
+    importSettings: 'Nhập Cài Đặt',
+    settingsExported: 'Đã xuất cài đặt thành công!',
+    settingsImported: 'Đã nhập cài đặt thành công!',
+    importError: 'Nhập cài đặt thất bại. File không hợp lệ.',
     
     // Settings - Providers
     statusConnected: '● Đã kết nối',
@@ -147,6 +152,11 @@ export const translations = {
     tabGithub: 'GitHub',
     tabAppearance: 'Appearance',
     tabAbout: 'About',
+    exportSettings: 'Export Settings',
+    importSettings: 'Import Settings',
+    settingsExported: 'Settings exported successfully!',
+    settingsImported: 'Settings imported successfully!',
+    importError: 'Failed to import settings. Invalid file.',
     
     // Settings - Providers
     statusConnected: '● Connected',

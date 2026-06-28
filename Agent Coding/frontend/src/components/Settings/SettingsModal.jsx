@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Key, Plus, Trash2, ExternalLink, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { X, Key, Plus, Trash2, ExternalLink, RefreshCw, Eye, EyeOff, Download, Upload } from 'lucide-react'
 import useProviderStore, { PROVIDER_MODELS } from '../../stores/providerStore'
 import useMcpStore from '../../stores/mcpStore'
 import useSettingsStore from '../../stores/settingsStore'
@@ -438,7 +438,49 @@ function McpSection() {
 
 function AppearanceSection() {
   const { theme, setTheme, language, setLanguage } = useSettingsStore()
+  const { providers, activeProvider, activeModel, contextWindow, showFreeOnly } = useProviderStore()
   const t = useTranslation(language)
+
+  const handleExport = async () => {
+    const { exportSettings } = await import('../../utils/crypto')
+    const settings = {
+      providers,
+      activeProvider,
+      activeModel,
+      contextWindow,
+      showFreeOnly,
+      theme,
+      language,
+    }
+    await exportSettings(settings)
+  }
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const { importSettings } = await import('../../utils/crypto')
+    try {
+      const imported = await importSettings(file)
+      // Apply imported settings
+      if (imported.providers) {
+        useProviderStore.setState({
+          providers: imported.providers,
+          activeProvider: imported.activeProvider,
+          activeModel: imported.activeModel,
+          contextWindow: imported.contextWindow,
+          showFreeOnly: imported.showFreeOnly,
+        })
+      }
+      if (imported.theme) useSettingsStore.setState({ theme: imported.theme })
+      if (imported.language) useSettingsStore.setState({ language: imported.language })
+      alert(t('importSuccess') || 'Settings imported successfully!')
+      // Reload to apply
+      window.location.reload()
+    } catch (err) {
+      alert(t('importError') || 'Import failed: ' + err.message)
+    }
+    e.target.value = ''
+  }
 
   return (
     <div className="appearance-settings">
@@ -467,6 +509,24 @@ function AppearanceSection() {
             <option value="dark">{t('themeDark')}</option>
             <option value="light">{t('themeLight')}</option>
           </select>
+        </div>
+      </div>
+
+      <div className="settings-section" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border)' }}>
+        <h3>Data & Backup</h3>
+        <p className="settings-desc" style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Export/Import encrypted settings (API keys are encrypted locally).
+        </p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={handleExport}>
+            <Download size={14} style={{ marginRight: '6px' }} /> Export Settings
+          </button>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+            <button type="button" className="btn btn-secondary">
+              <Upload size={14} style={{ marginRight: '6px' }} /> Import Settings
+            </button>
+          </label>
         </div>
       </div>
     </div>
