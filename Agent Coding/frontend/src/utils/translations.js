@@ -111,6 +111,8 @@ export const translations = {
     cancel: 'Hủy',
     cannotReadFolder: 'Không thể đọc thư mục này (quyền bị từ chối)',
     emptyFolder: 'Thư mục trống',
+    open: 'Mở',
+    rootPath: 'Gốc',
   },
   en: {
     // General
@@ -224,6 +226,8 @@ export const translations = {
     cancel: 'Cancel',
     cannotReadFolder: 'Cannot read this folder (permission denied)',
     emptyFolder: 'Empty folder',
+    open: 'Open',
+    rootPath: 'Root',
   }
 }
 

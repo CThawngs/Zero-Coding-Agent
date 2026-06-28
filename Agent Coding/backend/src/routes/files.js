@@ -500,7 +500,7 @@ router.get('/download', async (req, res) => {
 export default router;
 
 // ─── GET /api/files/browse-dirs?path=X ─────────────────────────────────────────
-// Returns list of directories for in-app folder browser (Cloud Run / Linux)
+// Returns list of directories AND files for in-app folder browser (Cloud Run / Linux)
 router.get('/browse-dirs', async (req, res) => {
   try {
     const { path: dirPath = process.cwd() } = req.query;
@@ -512,20 +512,35 @@ router.get('/browse-dirs', async (req, res) => {
     try {
       entries = await fsPromises.readdir(absPath, { withFileTypes: true });
     } catch {
-      // If cannot read, return empty
-      return res.json({ path: absPath, directories: [], error: 'cannot_read' });
+      return res.json({ path: absPath, entries: [], error: 'cannot_read' });
     }
 
-    const directories = entries
-      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
-      .map(e => ({ name: e.name, path: path.join(absPath, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    // Build entries with name, path, isDir, size
+    const resultEntries = [];
+    for (const e of entries) {
+      // Skip hidden files/dirs
+      if (e.name.startsWith('.')) continue;
+      const entryPath = path.join(absPath, e.name);
+      let size = null;
+      if (!e.isDirectory()) {
+        try {
+          const stat = await fsPromises.stat(entryPath);
+          size = stat.size;
+        } catch {}
+      }
+      resultEntries.push({
+        name: e.name,
+        path: entryPath,
+        isDir: e.isDirectory(),
+        size
+      });
+    }
 
     // Also get parent path
     const parent = path.dirname(absPath);
     const hasParent = parent !== absPath;
 
-    res.json({ path: absPath, directories, parent: hasParent ? parent : null });
+    res.json({ path: absPath, entries: resultEntries, parent: hasParent ? parent : null });
   } catch (err) {
     console.error('[BrowseDirs] Error:', err.message);
     res.status(500).json({ error: err.message });
