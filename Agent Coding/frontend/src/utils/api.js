@@ -127,7 +127,12 @@ export const api = {
   getDrives: () =>
     request('/files/drives'),
   selectDirectory: async () => {
-    // Try browser-native File System Access API first (Chrome/Edge/Opera)
+    // In local connection mode, always use the backend's server-side picker to get the real absolute path
+    if (api.getConnectionMode() === 'local') {
+      return request('/files/select-directory', { method: 'POST' })
+    }
+
+    // Try browser-native File System Access API first (only in cloud/remote mode)
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {
         const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
@@ -153,7 +158,7 @@ export const api = {
         return { success: false, message: 'Selection cancelled' }
       }
     }
-    // Fallback: server-side directory picker (PowerShell on local backend)
+    // Fallback: server-side directory picker
     return request('/files/select-directory', { method: 'POST' })
   },
   getDefaultWorkspace: () =>
