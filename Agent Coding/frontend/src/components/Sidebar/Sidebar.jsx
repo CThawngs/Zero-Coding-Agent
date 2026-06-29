@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react'
-import { Plus, Search, Settings, MessageSquare, Trash2, Edit3, ChevronDown, Zap, Loader2, FolderOpen } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { Plus, Search, Settings, MessageSquare, Trash2, Edit3, ChevronDown, Zap, Loader2 } from 'lucide-react'
 import useChatStore from '../../stores/chatStore'
 import useFileStore from '../../stores/fileStore'
 import useProviderStore from '../../stores/providerStore'
@@ -26,43 +26,6 @@ export default function Sidebar({ onSettings }) {
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [hoveredId, setHoveredId] = useState(null)
-  const setWorkspace = useFileStore(state => state.setWorkspace)
-  const folderInputRef = useRef(null)
-
-  // Open native OS folder dialog
-  const handleOpenFolder = () => {
-    if (folderInputRef.current) {
-      folderInputRef.current.click()
-    }
-  }
-
-  const handleFolderSelected = (e) => {
-    const files = e.target.files
-    if (files && files.length > 0) {
-      const connMode = api.getConnectionMode()
-      if (connMode === 'cloud') {
-        const parts = files[0].webkitRelativePath.split('/')
-        if (parts.length > 0) {
-          setWorkspace(`./workspace/${parts[0]}`)
-        }
-      } else {
-        // Local mode: resolve real absolute path via backend
-        const filePaths = Array.from(files).map(f => f.webkitRelativePath)
-        api.resolveFolderPath(filePaths).then(res => {
-          if (res && res.success && res.path) {
-            setWorkspace(res.path)
-          } else {
-            const parts = files[0].webkitRelativePath.split('/')
-            if (parts.length > 0) setWorkspace(parts[0])
-          }
-        }).catch(() => {
-          const parts = files[0].webkitRelativePath.split('/')
-          if (parts.length > 0) setWorkspace(parts[0])
-        })
-      }
-    }
-    e.target.value = null
-  }
 
   const filtered = useMemo(() => {
     const workspaceConvs = conversations.filter(c => c.workspace === workspace)
@@ -292,33 +255,13 @@ export default function Sidebar({ onSettings }) {
             <span className="sidebar-model-text">{activeModel}</span>
           </div>
         )}
-        <div style={{ display: 'flex', gap: '4px', width: '100%' }}>
-          <button
-            className="btn btn-ghost sidebar-settings-btn"
-            onClick={handleOpenFolder}
-            title={language === 'vi' ? 'Mở thư mục làm việc' : 'Open Workspace Folder'}
-            style={{ flex: 1 }}
-          >
-            <FolderOpen size={15} />
-            <span>{language === 'vi' ? 'Mở Folder' : 'Open Folder'}</span>
-          </button>
-          <button
-            className="btn btn-ghost sidebar-settings-btn"
-            onClick={onSettings}
-          >
-            <Settings size={15} />
-          </button>
-        </div>
-        {/* Hidden input for native OS folder picker */}
-        <input
-          ref={folderInputRef}
-          type="file"
-          webkitdirectory=""
-          directory=""
-          multiple
-          style={{ display: 'none' }}
-          onChange={handleFolderSelected}
-        />
+        <button
+          className="btn btn-ghost sidebar-settings-btn"
+          onClick={onSettings}
+        >
+          <Settings size={15} />
+          <span>{t('settings')}</span>
+        </button>
       </div>
     </div>
   )
