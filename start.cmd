@@ -1,140 +1,87 @@
-:; goto() { :; }
-goto windows_section
-
-# =============================================
-#   Unix (macOS / Linux / Ubuntu) Section
-# =============================================
-cd "$(dirname "$0")"
-
-echo "============================================="
-echo "  Zero Coding Agent Launcher (Unix)"
-echo "============================================="
-echo ""
-
-if ! command -v node &> /dev/null; then
-    echo "[ERROR] Node.js is not installed. Please install Node.js before running this script."
-    exit 1
-fi
-
-if [ ! -d "Agent Coding/backend/node_modules" ]; then
-    echo "Installing backend dependencies, please wait..."
-    cd "Agent Coding/backend"
-    npm install
-    cd ../..
-fi
-
-if [ ! -d "Agent Coding/frontend/node_modules" ]; then
-    echo "Installing frontend dependencies, please wait..."
-    cd "Agent Coding/frontend"
-    npm install --no-audit --no-fund
-    cd ../..
-fi
-
-if [ ! -f "Agent Coding/backend/public/index.html" ]; then
-    echo "Building frontend..."
-    cd "Agent Coding/frontend"
-    npm run build
-    cd ../..
-    mkdir -p "Agent Coding/backend/public"
-    cp -r Agent Coding/frontend/dist/* Agent Coding/backend/public/
-fi
-
-if command -v lsof &> /dev/null; then
-    PID=$(lsof -t -i:3747)
-    if [ ! -z "$PID" ]; then
-        echo "Stopping previous process on port 3747 (PID: $PID)..."
-        kill -9 $PID
-    fi
-elif command -v fuser &> /dev/null; then
-    echo "Stopping previous process on port 3747 using fuser..."
-    fuser -k 3747/tcp &> /dev/null
-fi
-
-echo "Starting Zero Coding Agent in the background..."
-echo "URL: http://localhost:3747"
-echo ""
-
-cd "Agent Coding/backend"
-nohup node src/app.js > /dev/null 2>&1 &
-disown
-cd ../..
-
-sleep 2
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    open "http://localhost:3747"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    if command -v xdg-open &> /dev/null; then
-        xdg-open "http://localhost:3747"
-    else
-        echo "Please open http://localhost:3747 in your browser."
-    fi
-else
-    echo "Please open http://localhost:3747 in your browser."
-fi
-
-echo "Launcher completed successfully. Closing terminal..."
-sleep 1
-kill -9 $PPID 2>/dev/null || exit 0
-
-# =============================================
-#   Windows Section
-# =============================================
-:windows_section
 @echo off
-title Zero Coding Agent - Launcher
+setlocal enabledelayedexpansion
 
-echo =============================================
-echo   Zero Coding Agent Launcher (Windows)
-echo =============================================
+set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+set "PROJECT_DIR=%SCRIPT_DIR%"
+set "BACKEND_DIR=%PROJECT_DIR%\Agent Coding\backend"
+set "FRONTEND_DIR=%PROJECT_DIR%\Agent Coding\frontend"
+
+title Zero Coding Agent - Launcher
+color 0A
+echo.
+echo  ============================================
+echo    Zero Coding Agent Launcher (Windows)
+echo  ============================================
 echo.
 
+:: ---------- Node.js check ----------
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not installed. Please download and install Node.js from https://nodejs.org/ before running this.
+    echo  [ERROR] Node.js is not installed.
+    echo    Download: https://nodejs.org/
     pause
     exit /b 1
 )
 
-cd /d "%~dp0"
-
-if not exist "Agent Coding\backend\node_modules" (
-    echo Installing backend dependencies, please wait...
-    cd "Agent Coding\backend"
-    call npm install
-    cd /d "%~dp0"
-)
-
-if not exist "Agent Coding\frontend\node_modules" (
-    echo Installing frontend dependencies, please wait...
-    cd "Agent Coding\frontend"
+:: ---------- Install deps if missing ----------
+if not exist "%BACKEND_DIR%\node_modules" (
+    echo  [1/3] Installing backend dependencies...
+    cd /d "%BACKEND_DIR%"
     call npm install --no-audit --no-fund
-    cd /d "%~dp0"
+    cd /d "%PROJECT_DIR%"
 )
 
-if not exist "Agent Coding\backend\public\index.html" (
-    echo Building frontend...
-    cd "Agent Coding\frontend"
-    call npm run build
-    cd /d "%~dp0"
-    xcopy /E /Y /I "Agent Coding\frontend\dist\*" "Agent Coding\backend\public" >nul
+if not exist "%FRONTEND_DIR%\node_modules" (
+    echo  [2/3] Installing frontend dependencies...
+    cd /d "%FRONTEND_DIR%"
+    call npm install --no-audit --no-fund
+    cd /d "%PROJECT_DIR%"
 )
 
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3747') do (
-    echo Stopping previous process on port 3747 with PID %%a...
-    taskkill /f /pid %%a >nul 2>&1
-)
-
-echo Starting Zero Coding Agent in the background...
-echo URL: http://localhost:3747
+echo  [3/3] Starting servers...
 echo.
 
-powershell -NoProfile -Command "Start-Process node -ArgumentList 'src/app.js' -WorkingDirectory '%~dp0Agent Coding\backend' -WindowStyle Hidden"
+:: ---------- Kill old processes on ports ----------
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3747 ^| findstr LISTENING 2^>nul') do taskkill /f /pid %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5743 ^| findstr LISTENING 2^>nul') do taskkill /f /pid %%a >nul 2>&1
 
+:: ---------- Start backend (detached, hidden) ----------
+powershell -WindowStyle Hidden -Command "Start-Process cmd -ArgumentList '/c cd /d \"!BACKEND_DIR!\" ^& node src\app.js' -WindowStyle Hidden"
+
+:: ---------- Start frontend (detached, hidden) ----------
+powershell -WindowStyle Hidden -Command "Start-Process cmd -ArgumentList '/c cd /d \"!FRONTEND_DIR!\" ^& node node_modules\vite\bin\vite.js --host 0.0.0.0 --port 5743' -WindowStyle Hidden"
+
+:: ---------- Wait for servers ----------
+echo   Waiting for servers to be ready...
+set "READY=0"
+for /l %%i in (1,1,30) do (
+    curl -sf "http://localhost:3747/health" >nul 2>&1
+    if !errorlevel! equ 0 (
+        curl -sf "http://localhost:5743" >nul 2>&1
+        if !errorlevel! equ 0 set "READY=1"
+    )
+    if !READY! equ 1 goto :ready
+    timeout /t 1 /nobreak >nul
+)
+
+echo.
+echo  [ERROR] Servers did not start within 30 seconds.
+echo  Check if ports 3747 or 5743 are in use.
+pause
+exit /b 1
+
+:ready
+echo.
+echo   Servers are ready!
+echo     Backend : http://localhost:3747
+echo     Frontend: http://localhost:5743
+echo.
+
+:: ---------- Open browser ----------
+start "" "http://localhost:5743"
+
+echo   Launcher done. Servers are running in background.
+echo   You can close this window safely.
 timeout /t 2 /nobreak >nul
-
-start "" http://localhost:3747
-
-echo Launcher completed successfully. Closing terminal...
-timeout /t 1 /nobreak >nul
 exit /b 0

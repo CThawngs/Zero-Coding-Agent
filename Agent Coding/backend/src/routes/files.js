@@ -603,3 +603,71 @@ router.get('/browse-dirs', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── POST /api/files/resolve-folder-path ─────────────────────────────────
+// Resolves the real absolute path from webkitRelativePath entries
+// Browser's <input webkitdirectory> only gives relative paths like "MyFolder/sub/file.txt"
+// This endpoint finds the actual absolute path on disk by searching common locations
+router.post('/resolve-folder-path', async (req, res) => {
+  try {
+    const { paths } = req.body;
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+      return res.json({ success: false, path: null });
+    }
+
+    const path = await import('path');
+    const { existsSync } = await import('fs');
+
+    // The root folder name is the first segment of the relative path
+    const rootFolder = paths[0].split('/')[0];
+
+    // Strategy: find a deeply nested file path on disk, then extract the workspace root
+    // Try common parent directories where the user might have their project
+    const os = await import('os');
+    const homeDir = os.homedir();
+    const cwd = process.cwd();
+
+    const searchDirs = [
+      cwd,
+      path.dirname(cwd),
+      path.dirname(path.dirname(cwd)),
+      homeDir,
+      path.join(homeDir, 'Documents'),
+      path.join(homeDir, 'Documents', 'Projects'),
+      path.join(homeDir, 'Desktop'),
+      path.join(homeDir, 'OneDrive', 'Documents', 'Projects'),
+    ];
+
+    // For each search dir, try to find the rootFolder, then validate a sub-path from webkitRelativePath
+    for (const searchDir of searchDirs) {
+      const candidatePath = path.join(searchDir, rootFolder);
+      if (existsSync(candidatePath)) {
+        // Validate: check if at least one file from the relative paths exists under this candidate
+        for (const relPath of paths.slice(0, 10)) {
+          const fullPath = path.join(searchDir, relPath);
+          if (existsSync(fullPath)) {
+            return res.json({ success: true, path: candidatePath });
+          }
+        }
+      }
+    }
+
+    // Fallback: recursive search in cwd parents (up to 6 levels)
+    let current = cwd;
+    for (let i = 0; i < 6; i++) {
+      const checkPath = path.join(current, rootFolder);
+      if (existsSync(checkPath)) {
+        return res.json({ success: true, path: checkPath });
+      }
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+
+    // Last fallback: return the folder name (user will need to set path manually)
+    res.json({ success: false, path: rootFolder });
+  } catch (err) {
+    console.error('[ResolveFolderPath] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});

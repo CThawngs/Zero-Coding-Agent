@@ -172,6 +172,26 @@ export const api = {
   },
   getDefaultWorkspace: () =>
     request('/files/default-workspace'),
+  // --- Resolve folder path from webkitRelativePath (native OS dialog) ---
+  resolveFolderPath: async (relativePaths) => {
+    // In cloud mode, no need to resolve — just use folder name
+    if (api.getConnectionMode() === 'cloud') {
+      const parts = (relativePaths[0] || '').split('/')
+      return { success: true, path: `./workspace/${parts[0] || 'project'}` }
+    }
+    // In local mode, ask backend to resolve the real absolute path
+    try {
+      const res = await request('/files/resolve-folder-path', {
+        method: 'POST',
+        body: { paths: relativePaths }
+      })
+      return res
+    } catch {
+      // Fallback: use folder name
+      const parts = (relativePaths[0] || '').split('/')
+      return { success: true, path: parts[0] || './' }
+    }
+  },
   downloadWorkspace: (workspacePath) => {
     return `${BASE_URL}/files/download?path=${encodeURIComponent(workspacePath)}`;
   },

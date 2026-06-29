@@ -35,23 +35,32 @@ export default function FileExplorer() {
   const handleFolderSelected = (e) => {
     const files = e.target.files
     if (files && files.length > 0) {
-      // Get folder path from first file's webkitRelativePath
-      // e.g. "FolderName/sub/file.txt" → workspace = "FolderName"
-      const parts = files[0].webkitRelativePath.split('/')
-      if (parts.length > 0) {
-        // The root folder name is the workspace
-        const folderName = parts[0]
-        setWorkspace(`./workspace/${folderName}`)
-        // For cloud mode, set directly
-        if (api.getConnectionMode() !== 'cloud') {
-          // Try to get full path from file path if available
-          try {
-            const filePath = files[0].name ? `${folderName}` : folderName
-            setWorkspace(filePath)
-          } catch {
-            setWorkspace(`./workspace/${folderName}`)
-          }
+      const connMode = api.getConnectionMode()
+      if (connMode === 'cloud') {
+        // Cloud mode: use folder name as sandbox directory
+        const parts = files[0].webkitRelativePath.split('/')
+        if (parts.length > 0) {
+          setWorkspace(`./workspace/${parts[0]}`)
         }
+      } else {
+        // Local mode: send file list to backend which returns the real absolute path
+        const filePaths = Array.from(files).map(f => f.webkitRelativePath)
+        api.resolveFolderPath(filePaths).then(res => {
+          if (res && res.success && res.path) {
+            setWorkspace(res.path)
+          } else {
+            // Fallback: use folder name from webkitRelativePath
+            const parts = files[0].webkitRelativePath.split('/')
+            if (parts.length > 0) {
+              setWorkspace(parts[0])
+            }
+          }
+        }).catch(() => {
+          const parts = files[0].webkitRelativePath.split('/')
+          if (parts.length > 0) {
+            setWorkspace(parts[0])
+          }
+        })
       }
     }
     // Reset input so we can select same folder again

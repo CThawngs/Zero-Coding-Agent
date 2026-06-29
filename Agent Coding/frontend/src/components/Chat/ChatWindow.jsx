@@ -25,6 +25,7 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
   const language = useSettingsStore(state => state.language)
   const t = useTranslation(language)
   const [manualPath, setManualPath] = useState('')
+  const localFolderRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -182,21 +183,39 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
 
                 <button 
                   className="btn btn-primary" 
-                  onClick={async () => {
-                    try {
-                      const res = await api.selectDirectory()
-                      if (res && res.success && res.path) {
-                        useFileStore.getState().setWorkspace(res.path)
-                      }
-                    } catch (err) {
-                      console.error("Failed to select workspace folder:", err)
-                    }
-                  }}
+                  onClick={() => { if (localFolderRef.current) localFolderRef.current.click() }}
                   style={{ padding: '12px 24px', fontSize: '14px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)' }}
                 >
                   <Folder size={16} />
                   {language === 'vi' ? 'Mở Thư mục làm việc' : 'Open Workspace Folder'}
                 </button>
+                {/* Hidden input for native OS folder picker */}
+                <input
+                  ref={localFolderRef}
+                  type="file"
+                  webkitdirectory=""
+                  directory=""
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const files = e.target.files
+                    if (files && files.length > 0) {
+                      const filePaths = Array.from(files).map(f => f.webkitRelativePath)
+                      api.resolveFolderPath(filePaths).then(res => {
+                        if (res && res.success && res.path) {
+                          useFileStore.getState().setWorkspace(res.path)
+                        } else {
+                          const parts = files[0].webkitRelativePath.split('/')
+                          if (parts.length > 0) useFileStore.getState().setWorkspace(parts[0])
+                        }
+                      }).catch(() => {
+                        const parts = files[0].webkitRelativePath.split('/')
+                        if (parts.length > 0) useFileStore.getState().setWorkspace(parts[0])
+                      })
+                    }
+                    e.target.value = null
+                  }}
+                />
 
                 {/* Or manual input */}
                 <div style={{ width: '100%', borderTop: '1px solid var(--border)', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -266,24 +285,6 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
           <ModelSelector />
         </div>
         <div className="chat-topbar-right">
-          {/* Change workspace button */}
-          <button
-            className="icon-btn"
-            onClick={async () => {
-              try {
-                const res = await api.selectDirectory()
-                if (res && res.success && res.path) {
-                  setWorkspace(res.path)
-                }
-              } catch (err) {
-                console.error("Failed to select workspace folder:", err)
-              }
-            }}
-            title={language === 'vi' ? 'Đổi workspace' : 'Change workspace'}
-            style={{ marginRight: '4px' }}
-          >
-            <Folder size={16} />
-          </button>
           <button
             className="icon-btn"
             onClick={onToggleSidebar}
