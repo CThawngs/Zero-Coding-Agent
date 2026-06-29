@@ -172,6 +172,9 @@ export const api = {
   },
   getDefaultWorkspace: () =>
     request('/files/default-workspace'),
+  // --- Validate if a path exists on disk (server-side) ---
+  validatePath: (path) =>
+    request('/files/validate-path', { method: 'POST', body: { path } }),
   // --- Resolve folder path from webkitRelativePath (native OS dialog) ---
   resolveFolderPath: async (relativePaths) => {
     // In cloud mode, no need to resolve — just use folder name

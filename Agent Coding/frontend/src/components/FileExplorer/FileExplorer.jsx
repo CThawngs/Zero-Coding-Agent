@@ -74,14 +74,32 @@ export default function FileExplorer() {
     }
   }
 
-  const handlePathSubmit = () => {
+  const handlePathSubmit = async () => {
     const trimmed = pathInput.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      setShowPathInput(false)
+      return
+    }
+    
     const connMode = api.getConnectionMode()
     if (connMode === 'cloud') {
-      setWorkspace(`./workspace/${trimmed}`)
+      await setWorkspace(`./workspace/${trimmed}`)
     } else {
-      setWorkspace(trimmed)
+      // Local mode: validate path exists, then set workspace
+      try {
+        const res = await api.validatePath(trimmed)
+        if (res && res.exists) {
+          await setWorkspace(res.path)
+          console.log('[PathInput] Workspace set:', res.path)
+        } else {
+          // Path doesn't exist — still set it (backend auto-creates)
+          await setWorkspace(trimmed)
+          console.warn('[PathInput] Path not found, using as-is:', trimmed)
+        }
+      } catch (err) {
+        console.error('[PathInput] Validation error:', err)
+        await setWorkspace(trimmed)
+      }
     }
     setShowPathInput(false)
   }

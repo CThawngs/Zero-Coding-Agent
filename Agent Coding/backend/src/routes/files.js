@@ -740,3 +740,20 @@ router.post('/resolve-folder-path', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── POST /api/files/validate-path ───────────────────────────────────────
+// Validates if a path exists on the server, returns { exists: true/false, path: normalized }
+router.post('/validate-path', async (req, res) => {
+  try {
+    const { path: checkPath } = req.body;
+    if (!checkPath) {
+      return res.status(400).json({ error: 'path is required' });
+    }
+    const resolved = resolve(checkPath);
+    const exists = existsSync(resolved);
+    res.json({ exists, path: resolved, type: exists ? (statSync(resolved).isDirectory() ? 'directory' : 'file') : null });
+  } catch (err) {
+    console.error('[ValidatePath] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
