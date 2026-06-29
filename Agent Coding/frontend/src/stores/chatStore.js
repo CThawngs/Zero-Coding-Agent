@@ -419,6 +419,7 @@ const useChatStore = create((set, get) => ({
           customApiKey,
           customBaseURL,
           permissionMode: conv?.permissionMode || 'balanced',
+          workspace: useFileStore.getState().workspace || null,
         },
         // onChunk
         (chunk) => {

@@ -235,7 +235,7 @@ export const api = {
 // SSE Stream Handler - matches backend POST /api/stream
 // ============================================================
 export function streamChat(
-  { conversationId, content, attachments, provider, model, contextWindow, messages, customApiKey, customBaseURL, permissionMode },
+  { conversationId, content, attachments, provider, model, contextWindow, messages, customApiKey, customBaseURL, permissionMode, workspace, signal },
   onChunk,
   onToolCall,
   onDone,
@@ -253,6 +253,7 @@ export function streamChat(
     model,
     contextWindow: contextWindow || 128000,
     conversationId,
+    workspace: workspace || null,
     attachments: attachments || [],
     saveConversation: true,
     customApiKey,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { promises as fs, existsSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, isAbsolute, join } from 'path';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { streamLLM, parseToolCallsFromText, AGENT_SYSTEM_PROMPT } from '../services/llmRouter.js';
 import {
@@ -123,8 +124,16 @@ function buildAttachmentContext(processed) {
 }
 
 // ─── Execute Tool Call ────────────────────────────────────────────────────────
-async function executeToolCall(toolCall, res, permissionMode = 'balanced', conversationId = null) {
+async function executeToolCall(toolCall, res, permissionMode = 'balanced', conversationId = null, workspace = null) {
   const { tool, params } = toolCall;
+
+  // Resolve relative paths against workspace
+  const resolvePath = (p) => {
+    if (!p) return p;
+    if (path.isAbsolute(p)) return p;
+    if (workspace) return path.resolve(workspace, p);
+    return p;
+  };
 
   try {
     // 1. Handle MCP dynamic tool calls
@@ -163,31 +172,31 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
 
     switch (tool) {
       case 'read_file': {
-        const result = await readFile(params.path);
+        const result = await readFile(resolvePath(params.path));
         return { success: true, ...result };
       }
       case 'write_file': {
-        const result = await writeFile(params.path, params.content);
-        return { success: true, ...result, message: `Wrote ${result.size} bytes to ${params.path}` };
+        const result = await writeFile(resolvePath(params.path), params.content);
+        return { success: true, ...result, message: `Wrote ${result.size} bytes to ${resolvePath(params.path)}` };
       }
       case 'create_file': {
-        const result = await createFile(params.path, params.content || '');
+        const result = await createFile(resolvePath(params.path), params.content || '');
         return { success: true, ...result };
       }
       case 'delete_file': {
-        const result = await deleteFile(params.path);
+        const result = await deleteFile(resolvePath(params.path));
         return { success: true, ...result };
       }
       case 'list_directory': {
-        const result = await listDirectory(params.path);
+        const result = await listDirectory(resolvePath(params.path));
         return { success: true, ...result };
       }
       case 'create_directory': {
-        const result = await createDirectory(params.path);
+        const result = await createDirectory(resolvePath(params.path));
         return { success: true, ...result };
       }
       case 'search_files': {
-        const result = await searchFiles(params.root, params.pattern);
+        const result = await searchFiles(resolvePath(params.root), params.pattern);
         return { success: true, ...result };
       }
       case 'fetch_url': {
@@ -199,7 +208,7 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
         return { success: true, ...result };
       }
       case 'run_terminal_command': {
-        const result = await executeCommand(params.command, { cwd: params.cwd });
+        const result = await executeCommand(params.command, { cwd: params.cwd || workspace });
         return { success: true, ...result };
       }
       case 'connect_mcp_server': {
@@ -300,7 +309,7 @@ async function executeToolCall(toolCall, res, permissionMode = 'balanced', conve
 }
 
 // ─── Agent Loop: one full user message cycle ────────────────────
-async function* runAgentCycle({ provider, model, messages, contextWindow, customApiKey, customBaseURL, permissionMode, conversationId, signal }) {
+async function* runAgentCycle({ provider, model, messages, contextWindow, customApiKey, customBaseURL, permissionMode, conversationId, workspace, signal }) {
   let iterationCount = 0;
   let currentMessages = messages;
   let finalResponseText = '';
@@ -355,7 +364,7 @@ async function* runAgentCycle({ provider, model, messages, contextWindow, custom
           : `📄 ${tc.tool.replace(/_/g, ' ')}${tc.params?.path ? ': ' + tc.params.path : ''}`;
         yield { type: 'activity', message: toolDesc, iteration: iterationCount };
 
-        const result = await executeToolCall(tc, null, permissionMode, conversationId);
+        const result = await executeToolCall(tc, null, permissionMode, conversationId, workspace);
         toolCallResults.push({ id: tcId, tool: tc.tool, params: tc.params, result });
 
         if (result.type === 'ask_user') {
@@ -428,6 +437,7 @@ router.post('/stream', async (req, res) => {
     model,
     contextWindow = 128000,
     conversationId,
+    workspace,
     attachments = [],
     saveConversation = true,
     permissionMode = 'balanced',
@@ -491,10 +501,11 @@ router.post('/stream', async (req, res) => {
       model,
       messages: fullMessages,
       contextWindow,
-      customApiKey: providerApiKey,
+      customApiKey: req.body.customApiKey,
       customBaseURL: providerBaseURL,
       permissionMode,
       conversationId,
+      workspace,
       signal
     })) {
       if (clientDisconnected || signal.aborted) break;
@@ -565,6 +576,7 @@ router.post('/stream/approve', async (req, res) => {
     model,
     messages,
     contextWindow = 128000,
+    workspace,
     permissionMode = 'balanced',
   } = req.body;
 
@@ -594,6 +606,7 @@ router.post('/stream/approve', async (req, res) => {
       contextWindow,
       permissionMode,
       conversationId,
+      workspace,
       signal
     })) {
       if (signal.aborted) break;
