@@ -616,56 +616,125 @@ router.post('/resolve-folder-path', async (req, res) => {
     }
 
     const path = await import('path');
-    const { existsSync } = await import('fs');
+    const { existsSync, readdirSync, statSync } = await import('fs');
 
     // The root folder name is the first segment of the relative path
     const rootFolder = paths[0].split('/')[0];
 
-    // Strategy: find a deeply nested file path on disk, then extract the workspace root
-    // Try common parent directories where the user might have their project
+    // Pick a deep relative path for validation (more unique = better matching)
+    // Sort by depth descending to get the most specific path
+    const sortedPaths = [...paths].sort((a, b) => b.split('/').length - a.split('/').length);
+    const deepRelPath = sortedPaths[0]; // e.g. "MyProject/src/components/App.jsx"
+
     const os = await import('os');
     const homeDir = os.homedir();
     const cwd = process.cwd();
 
+    // Build comprehensive search directory list
     const searchDirs = [
       cwd,
       path.dirname(cwd),
       path.dirname(path.dirname(cwd)),
+      path.dirname(path.dirname(path.dirname(cwd))),
       homeDir,
       path.join(homeDir, 'Documents'),
       path.join(homeDir, 'Documents', 'Projects'),
       path.join(homeDir, 'Desktop'),
+      path.join(homeDir, 'Downloads'),
+      path.join(homeDir, 'OneDrive'),
+      path.join(homeDir, 'OneDrive', 'Documents'),
       path.join(homeDir, 'OneDrive', 'Documents', 'Projects'),
+      path.join(homeDir, 'OneDrive', 'Desktop'),
+      'C:\\',
+      'D:\\',
+      'E:\\',
     ];
 
-    // For each search dir, try to find the rootFolder, then validate a sub-path from webkitRelativePath
-    for (const searchDir of searchDirs) {
-      const candidatePath = path.join(searchDir, rootFolder);
-      if (existsSync(candidatePath)) {
-        // Validate: check if at least one file from the relative paths exists under this candidate
-        for (const relPath of paths.slice(0, 10)) {
-          const fullPath = path.join(searchDir, relPath);
-          if (existsSync(fullPath)) {
+    // Remove duplicates
+    const uniqueSearchDirs = [...new Set(searchDirs)];
+
+    // Phase 1: Direct search — check if rootFolder exists in each searchDir
+    // and validate with a deep file match
+    for (const searchDir of uniqueSearchDirs) {
+      try {
+        const candidatePath = path.join(searchDir, rootFolder);
+        if (existsSync(candidatePath)) {
+          // Validate: check if the deep relative file exists under this candidate
+          const fullFilePath = path.join(searchDir, deepRelPath);
+          if (existsSync(fullFilePath)) {
             return res.json({ success: true, path: candidatePath });
           }
+          // Also try a few more paths for validation
+          for (const relPath of sortedPaths.slice(0, 5)) {
+            const testPath = path.join(searchDir, relPath);
+            if (existsSync(testPath)) {
+              return res.json({ success: true, path: candidatePath });
+            }
+          }
         }
+      } catch {
+        // Permission denied or invalid path — skip
       }
     }
 
-    // Fallback: recursive search in cwd parents (up to 6 levels)
+    // Phase 2: Recursive search — walk up from cwd (up to 8 levels)
     let current = cwd;
-    for (let i = 0; i < 6; i++) {
-      const checkPath = path.join(current, rootFolder);
-      if (existsSync(checkPath)) {
-        return res.json({ success: true, path: checkPath });
-      }
+    for (let i = 0; i < 8; i++) {
+      try {
+        const checkPath = path.join(current, rootFolder);
+        if (existsSync(checkPath)) {
+          return res.json({ success: true, path: checkPath });
+        }
+      } catch {}
       const parent = path.dirname(current);
       if (parent === current) break;
       current = parent;
     }
 
-    // Last fallback: return the folder name (user will need to set path manually)
-    res.json({ success: false, path: rootFolder });
+    // Phase 3: Walk down from home directory (1 level deep)
+    try {
+      const homeEntries = readdirSync(homeDir);
+      for (const entry of homeEntries) {
+        try {
+          const entryPath = path.join(homeDir, entry);
+          const stat = statSync(entryPath);
+          if (stat.isDirectory()) {
+            const candidatePath = path.join(entryPath, rootFolder);
+            if (existsSync(candidatePath)) {
+              const fullFilePath = path.join(entryPath, deepRelPath);
+              if (existsSync(fullFilePath)) {
+                return res.json({ success: true, path: candidatePath });
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // Phase 4: Walk down from C:\ and D:\ (1 level deep)
+    for (const drive of ['C:\\', 'D:\\', 'E:\\']) {
+      try {
+        const driveEntries = readdirSync(drive);
+        for (const entry of driveEntries) {
+          try {
+            const entryPath = path.join(drive, entry);
+            const stat = statSync(entryPath);
+            if (stat.isDirectory()) {
+              const candidatePath = path.join(entryPath, rootFolder);
+              if (existsSync(candidatePath)) {
+                const fullFilePath = path.join(entryPath, deepRelPath);
+                if (existsSync(fullFilePath)) {
+                  return res.json({ success: true, path: candidatePath });
+                }
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // Last fallback: return failure with helpful message
+    res.json({ success: false, path: null, message: `Could not locate "${rootFolder}" on disk. Please enter the absolute path manually.` });
   } catch (err) {
     console.error('[ResolveFolderPath] Error:', err.message);
     res.status(500).json({ error: err.message });

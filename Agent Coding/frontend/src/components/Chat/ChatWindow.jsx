@@ -200,17 +200,19 @@ export default function ChatWindow({ onToggleSidebar, onToggleExplorer, sidebarO
                   onChange={(e) => {
                     const files = e.target.files
                     if (files && files.length > 0) {
-                      const filePaths = Array.from(files).map(f => f.webkitRelativePath)
+                      const filePaths = Array.from(files).slice(0, 50).map(f => f.webkitRelativePath)
                       api.resolveFolderPath(filePaths).then(res => {
                         if (res && res.success && res.path) {
                           useFileStore.getState().setWorkspace(res.path)
                         } else {
-                          const parts = files[0].webkitRelativePath.split('/')
-                          if (parts.length > 0) useFileStore.getState().setWorkspace(parts[0])
+                          console.warn('[FolderPicker] Could not resolve path:', res?.message)
+                          // Focus manual path input as fallback
+                          setManualPath('')
+                          document.querySelector('input[placeholder*="C:\\\\Projects"]')?.focus()
                         }
-                      }).catch(() => {
-                        const parts = files[0].webkitRelativePath.split('/')
-                        if (parts.length > 0) useFileStore.getState().setWorkspace(parts[0])
+                      }).catch((err) => {
+                        console.error('[FolderPicker] resolveFolderPath failed:', err)
+                        setManualPath('')
                       })
                     }
                     e.target.value = null

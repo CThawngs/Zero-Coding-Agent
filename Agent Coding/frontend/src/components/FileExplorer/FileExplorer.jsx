@@ -44,22 +44,21 @@ export default function FileExplorer() {
         }
       } else {
         // Local mode: send file list to backend which returns the real absolute path
-        const filePaths = Array.from(files).map(f => f.webkitRelativePath)
+        // Limit to 50 files to avoid payload issues
+        const filePaths = Array.from(files).slice(0, 50).map(f => f.webkitRelativePath)
         api.resolveFolderPath(filePaths).then(res => {
           if (res && res.success && res.path) {
             setWorkspace(res.path)
           } else {
-            // Fallback: use folder name from webkitRelativePath
-            const parts = files[0].webkitRelativePath.split('/')
-            if (parts.length > 0) {
-              setWorkspace(parts[0])
-            }
+            // Show error and fallback to manual input
+            console.warn('[FolderPicker] Could not resolve path:', res?.message || 'unknown error')
+            setShowPathInput(true)
+            setPathInput('')
           }
-        }).catch(() => {
-          const parts = files[0].webkitRelativePath.split('/')
-          if (parts.length > 0) {
-            setWorkspace(parts[0])
-          }
+        }).catch((err) => {
+          console.error('[FolderPicker] resolveFolderPath failed:', err)
+          setShowPathInput(true)
+          setPathInput('')
         })
       }
     }
